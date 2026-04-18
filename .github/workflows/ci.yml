@@ -25,16 +25,16 @@ jobs:
 
     steps:
       - name: 检出代码
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
-      - name: 安装 Rust 1.85
+      - name: 安装 Rust 1.88
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: 1.88.0
           components: rustfmt,clippy
 
       - name: 缓存 Cargo 依赖
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.cargo/registry/index
@@ -48,7 +48,7 @@ jobs:
 
       - name: 恢复 target 缓存
         id: check-target-cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           path: target
           key: ${{ runner.os }}-target-check-1.88.0-${{ hashFiles('Cargo.lock', '**/Cargo.toml', 'rust-toolchain.toml', 'clippy.toml', 'rustfmt.toml') }}-${{ github.sha }}
@@ -65,7 +65,7 @@ jobs:
 
       - name: 保存 target 缓存
         if: success() && steps.check-target-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v5
         with:
           path: target
           key: ${{ runner.os }}-target-check-1.88.0-${{ hashFiles('Cargo.lock', '**/Cargo.toml', 'rust-toolchain.toml', 'clippy.toml', 'rustfmt.toml') }}-${{ github.sha }}
@@ -85,7 +85,7 @@ jobs:
 
     steps:
       - name: 检出代码
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: 安装 Rust 工具链
         uses: dtolnay/rust-toolchain@stable
@@ -98,7 +98,7 @@ jobs:
           tool: nextest
 
       - name: 缓存 Cargo 依赖
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.cargo/registry/index
@@ -112,7 +112,7 @@ jobs:
 
       - name: 恢复 target 缓存
         id: test-target-cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           path: target
           key: ${{ runner.os }}-target-test-${{ matrix.toolchain }}-${{ hashFiles('Cargo.lock', '**/Cargo.toml', 'rust-toolchain.toml', 'clippy.toml', 'rustfmt.toml') }}-${{ github.sha }}
@@ -129,7 +129,7 @@ jobs:
 
       - name: 保存 target 缓存
         if: success() && steps.test-target-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v5
         with:
           path: target
           key: ${{ runner.os }}-target-test-${{ matrix.toolchain }}-${{ hashFiles('Cargo.lock', '**/Cargo.toml', 'rust-toolchain.toml', 'clippy.toml', 'rustfmt.toml') }}-${{ github.sha }}
@@ -149,7 +149,7 @@ jobs:
 
     steps:
       - name: 检出代码
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: 安装 Rust 工具链
         uses: dtolnay/rust-toolchain@stable
@@ -157,7 +157,7 @@ jobs:
           toolchain: ${{ matrix.toolchain }}
 
       - name: 缓存 Cargo 依赖
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.cargo/registry/index
@@ -171,7 +171,7 @@ jobs:
 
       - name: 恢复 target 缓存
         id: build-target-cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           path: target
           key: ${{ runner.os }}-target-build-${{ matrix.toolchain }}-${{ hashFiles('Cargo.lock', '**/Cargo.toml', 'rust-toolchain.toml', 'clippy.toml', 'rustfmt.toml') }}-${{ github.sha }}
@@ -185,7 +185,7 @@ jobs:
 
       - name: 保存 target 缓存
         if: success() && steps.build-target-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v5
         with:
           path: target
           key: ${{ runner.os }}-target-build-${{ matrix.toolchain }}-${{ hashFiles('Cargo.lock', '**/Cargo.toml', 'rust-toolchain.toml', 'clippy.toml', 'rustfmt.toml') }}-${{ github.sha }}

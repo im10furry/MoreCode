@@ -1,0 +1,20 @@
+[package]
+name = "config"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lib]
+name = "mc_config"
+path = "src/lib.rs"
+
+[dependencies]
+mc-core.workspace = true
+notify.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+toml.workspace = true

@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 use uuid::Uuid;
 
-use crate::AgentHandoff;
+use crate::handoff_min::AgentHandoff;
 
 #[derive(Debug, thiserror::Error)]
 pub enum AgentError {
@@ -498,10 +498,15 @@ fn infer_files(task: &str) -> Vec<String> {
     let mut files = task
         .split_whitespace()
         .map(|token| {
-            token.trim_matches(|ch: char| matches!(ch, ',' | '.' | '"' | '\'' | '(' | ')' | '[' | ']'))
+            token.trim_matches(|ch: char| {
+                matches!(ch, ',' | '.' | '"' | '\'' | '(' | ')' | '[' | ']')
+            })
         })
         .filter(|token| {
-            token.contains('/') || token.ends_with(".rs") || token.ends_with(".md") || token.ends_with(".toml")
+            token.contains('/')
+                || token.ends_with(".rs")
+                || token.ends_with(".md")
+                || token.ends_with(".toml")
         })
         .map(ToOwned::to_owned)
         .collect::<Vec<_>>();

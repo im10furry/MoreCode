@@ -56,8 +56,7 @@ pub fn should_recursively_split(
         if sub_task_count <= 2 && available_budget >= min_child_budget.saturating_mul(2) {
             return RecursiveDecision::Degrade {
                 reason: format!(
-                    "预算不足以递归拆分（需要 {}，可用 {}），降级为并行执行",
-                    required, available_budget
+                    "预算不足以递归拆分（需要 {required}，可用 {available_budget}），降级为并行执行"
                 ),
             };
         }
@@ -69,7 +68,7 @@ pub fn should_recursively_split(
 
     if sub_task_count <= 2 {
         return RecursiveDecision::Degrade {
-            reason: format!("子任务数为 {}，按约束使用并行执行", sub_task_count),
+            reason: format!("子任务数为 {sub_task_count}，按约束使用并行执行"),
         };
     }
 

@@ -30,29 +30,24 @@ impl BroadcastSubscriber {
     }
 
     pub async fn recv(&mut self) -> Result<BroadcastEvent, CommunicationError> {
-        loop {
-            match self.receiver.recv().await {
-                Ok(event) => return Ok(event),
-                Err(broadcast::error::RecvError::Closed) => {
-                    return Err(CommunicationError::ChannelClosed {
-                        channel: "broadcast".to_string(),
-                    });
-                }
-                Err(broadcast::error::RecvError::Lagged(skipped)) => {
-                    warn!(
-                        subscriber = %self.subscriber_name,
-                        skipped,
-                        "broadcast subscriber lagged; replaying latest snapshot",
-                    );
-                    self.receiver = self.receiver.resubscribe();
+        match self.receiver.recv().await {
+            Ok(event) => Ok(event),
+            Err(broadcast::error::RecvError::Closed) => Err(CommunicationError::ChannelClosed {
+                channel: "broadcast".to_string(),
+            }),
+            Err(broadcast::error::RecvError::Lagged(skipped)) => {
+                warn!(
+                    subscriber = %self.subscriber_name,
+                    skipped,
+                    "broadcast subscriber lagged; replaying latest snapshot",
+                );
+                self.receiver = self.receiver.resubscribe();
 
-                    if let Some(snapshot) = self.latest_snapshot.read().ok().and_then(|g| g.clone())
-                    {
-                        return Ok(snapshot);
-                    }
-
-                    return Err(CommunicationError::BroadcastLagged { skipped });
+                if let Some(snapshot) = self.latest_snapshot.read().ok().and_then(|g| g.clone()) {
+                    return Ok(snapshot);
                 }
+
+                Err(CommunicationError::BroadcastLagged { skipped })
             }
         }
     }

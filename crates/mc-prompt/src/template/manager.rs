@@ -93,7 +93,7 @@ impl TemplateManager {
                 let variables = variable_names
                     .into_iter()
                     .map(|name| TemplateVariable {
-                        description: format!("template variable '{}'", name),
+                        description: format!("template variable '{name}'"),
                         name,
                         required: true,
                         default_value: None,

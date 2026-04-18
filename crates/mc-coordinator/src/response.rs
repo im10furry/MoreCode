@@ -1,4 +1,4 @@
-use mc_agent::TestReport;
+use mc_agent::trait_def_min::TestReport;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

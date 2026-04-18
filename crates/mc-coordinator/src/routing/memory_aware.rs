@@ -28,7 +28,10 @@ pub fn select_agent_set(
     };
 
     if !preflight_check {
-        agents.retain(|agent_type| *agent_type != AgentType::Reviewer || !matches!(route_level, RouteLevel::Medium | RouteLevel::Complex));
+        agents.retain(|agent_type| {
+            *agent_type != AgentType::Reviewer
+                || !matches!(route_level, RouteLevel::Medium | RouteLevel::Complex)
+        });
     }
 
     agents

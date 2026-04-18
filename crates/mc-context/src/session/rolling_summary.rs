@@ -37,7 +37,7 @@ impl RollingSummaryPacket {
         if !self.pinned_updates.is_empty() {
             output.push_str("### Pinned Updates\n");
             for update in &self.pinned_updates {
-                output.push_str(&format!("- {}\n", update));
+                output.push_str(&format!("- {update}\n"));
             }
             output.push('\n');
         }
@@ -49,14 +49,14 @@ impl RollingSummaryPacket {
         if !self.key_decisions.is_empty() {
             output.push_str("\n### Key Decisions\n");
             for decision in &self.key_decisions {
-                output.push_str(&format!("- {}\n", decision));
+                output.push_str(&format!("- {decision}\n"));
             }
         }
 
         if !self.unresolved_items.is_empty() {
             output.push_str("\n### Unresolved Items\n");
             for item in &self.unresolved_items {
-                output.push_str(&format!("- {}\n", item));
+                output.push_str(&format!("- {item}\n"));
             }
         }
 

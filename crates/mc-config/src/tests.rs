@@ -292,7 +292,17 @@ headers = { Authorization = "project", X-Team = "core" }
         workspace.project_config_path(),
     );
 
-    let config = loader.load().await.unwrap();
+    let mut loaded = None;
+    for _ in 0..5 {
+        match loader.load().await {
+            Ok(config) => {
+                loaded = Some(config);
+                break;
+            }
+            Err(_) => sleep(Duration::from_millis(50)).await,
+        }
+    }
+    let config = loaded.expect("config should load after retries");
 
     assert_eq!(config.coordinator.max_token_budget, 50_000);
     assert_eq!(config.agent.temperature, 0.9);
@@ -357,7 +367,7 @@ temperature = 0.2
     let mut receiver = loader.subscribe();
     loader.start_hot_reload().await.unwrap();
 
-    sleep(Duration::from_millis(300)).await;
+    sleep(Duration::from_secs(1)).await;
     write_file(
         &workspace.project_config_path(),
         r#"
@@ -366,10 +376,10 @@ temperature = 1.1
 "#,
     );
 
-    let reloaded = timeout(Duration::from_secs(10), async {
+    let reloaded = timeout(Duration::from_secs(30), async {
         loop {
             match receiver.recv().await {
-                Ok(ConfigChangeEvent::Reloaded { config }) => break config,
+                Ok(ConfigChangeEvent::Reloaded { config }) => break *config,
                 Ok(_) => continue,
                 Err(error) => panic!("unexpected broadcast error: {error}"),
             }

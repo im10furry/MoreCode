@@ -74,7 +74,7 @@ impl CommunicationChannels {
         send_with_timeout(
             sender,
             message,
-            format!("control/{}", agent_type),
+            format!("control/{agent_type}"),
             Some(&self.broadcast_sender),
         )
         .await

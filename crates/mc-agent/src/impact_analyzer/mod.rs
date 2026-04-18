@@ -60,7 +60,11 @@ impl ImpactAnalyzer {
         Self { config }
     }
 
-    fn resolve_direct_files(&self, task: &TaskDescription, project_ctx: &ProjectContext) -> Vec<String> {
+    fn resolve_direct_files(
+        &self,
+        task: &TaskDescription,
+        project_ctx: &ProjectContext,
+    ) -> Vec<String> {
         if !task.affected_files.is_empty() {
             return task.affected_files.clone();
         }
@@ -115,7 +119,10 @@ impl ImpactAnalyzer {
     fn dependents(project_ctx: &ProjectContext) -> HashMap<String, Vec<String>> {
         let mut reverse = HashMap::<String, Vec<String>>::new();
         for edge in &project_ctx.dependency_graph.edges {
-            reverse.entry(edge.to.clone()).or_default().push(edge.from.clone());
+            reverse
+                .entry(edge.to.clone())
+                .or_default()
+                .push(edge.from.clone());
         }
         reverse
     }
@@ -123,9 +130,10 @@ impl ImpactAnalyzer {
     fn risk_for_path(path: &str, dependent_count: usize, task: &TaskDescription) -> RiskLevel {
         let mut risk = if path.ends_with(".md") || path.contains("/tests/") {
             RiskLevel::Low
-        } else if path.ends_with("Cargo.toml") || path.ends_with("Cargo.lock") {
-            RiskLevel::High
-        } else if dependent_count > 0 {
+        } else if path.ends_with("Cargo.toml")
+            || path.ends_with("Cargo.lock")
+            || dependent_count > 0
+        {
             RiskLevel::High
         } else {
             RiskLevel::Medium
@@ -136,7 +144,11 @@ impl ImpactAnalyzer {
         risk
     }
 
-    fn deterministic_report(&self, ctx: &AgentContext, project_ctx: &ProjectContext) -> ImpactReport {
+    fn deterministic_report(
+        &self,
+        ctx: &AgentContext,
+        project_ctx: &ProjectContext,
+    ) -> ImpactReport {
         let root = Path::new(&project_ctx.root_path);
         let direct_files = self.resolve_direct_files(&ctx.task, project_ctx);
         let dependents = Self::dependents(project_ctx);
@@ -151,7 +163,7 @@ impl ImpactAnalyzer {
             direct_impacts.push(ImpactChange {
                 file: file.clone(),
                 change_type: infer_change_type(file),
-                description: format!("Directly impacted target `{}`", file),
+                description: format!("Directly impacted target `{file}`"),
                 affected_symbols: Self::parse_symbols(root, file),
                 risk_level: risk,
             });
@@ -166,9 +178,15 @@ impl ImpactAnalyzer {
                 indirect_impacts.push(ImpactChange {
                     file: module.clone(),
                     change_type: ChangeType::ModifyFile,
-                    description: format!("Downstream module `{}` depends on a changed target", module),
+                    description: format!(
+                        "Downstream module `{module}` depends on a changed target"
+                    ),
                     affected_symbols: Vec::new(),
-                    risk_level: if next.is_empty() { RiskLevel::Medium } else { RiskLevel::High },
+                    risk_level: if next.is_empty() {
+                        RiskLevel::Medium
+                    } else {
+                        RiskLevel::High
+                    },
                 });
             }
         }
@@ -179,7 +197,12 @@ impl ImpactAnalyzer {
         }
 
         let mut risk_assessment = Vec::new();
-        for level in [RiskLevel::Low, RiskLevel::Medium, RiskLevel::High, RiskLevel::Critical] {
+        for level in [
+            RiskLevel::Low,
+            RiskLevel::Medium,
+            RiskLevel::High,
+            RiskLevel::Critical,
+        ] {
             let files = direct_impacts
                 .iter()
                 .chain(indirect_impacts.iter())
@@ -195,8 +218,12 @@ impl ImpactAnalyzer {
                 mitigation: match level {
                     RiskLevel::Low => "Basic regression check is enough".to_string(),
                     RiskLevel::Medium => "Review touched APIs and run focused tests".to_string(),
-                    RiskLevel::High => "Review dependency edges and verify callers before merge".to_string(),
-                    RiskLevel::Critical => "Require explicit approval and staged rollout".to_string(),
+                    RiskLevel::High => {
+                        "Review dependency edges and verify callers before merge".to_string()
+                    }
+                    RiskLevel::Critical => {
+                        "Require explicit approval and staged rollout".to_string()
+                    }
                 },
                 affected_files: files,
             });
@@ -213,7 +240,12 @@ impl ImpactAnalyzer {
         }
     }
 
-    async fn enrich(&self, ctx: &AgentContext, project_ctx: &ProjectContext, report: &mut ImpactReport) -> Result<u32, AgentError> {
+    async fn enrich(
+        &self,
+        ctx: &AgentContext,
+        project_ctx: &ProjectContext,
+        report: &mut ImpactReport,
+    ) -> Result<u32, AgentError> {
         let prompt = format!(
             "Task: {}\nRoot: {}\nDirect impacts: {}\nIndirect impacts: {}\nOverall risk: {:?}",
             ctx.task.user_input,
@@ -283,19 +315,19 @@ impl Agent for ImpactAnalyzer {
         let project_ctx = project_ctx.ok_or_else(|| AgentError::MissingContextData {
             data_type: "ProjectContext".to_string(),
         })?;
-        Ok(AgentContext::new(task.clone(), shared, self.config.clone()).with_project_ctx(project_ctx))
+        Ok(AgentContext::new(task.clone(), shared, self.config.clone())
+            .with_project_ctx(project_ctx))
     }
 
     async fn execute(&self, ctx: &AgentContext) -> Result<AgentExecutionReport, AgentError> {
         let project_ctx = if let Some(project_ctx) = ctx.project_ctx.as_deref().cloned() {
             project_ctx
         } else {
-            ctx.handoff
-                .get::<ProjectContext>()
-                .await
-                .ok_or_else(|| AgentError::MissingContextData {
+            ctx.handoff.get::<ProjectContext>().await.ok_or_else(|| {
+                AgentError::MissingContextData {
                     data_type: "ProjectContext".to_string(),
-                })?
+                }
+            })?
         };
         let mut report = self.deterministic_report(ctx, &project_ctx);
         let llm_tokens = self.enrich(ctx, &project_ctx, &mut report).await?;

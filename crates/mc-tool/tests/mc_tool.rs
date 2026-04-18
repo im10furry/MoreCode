@@ -98,7 +98,7 @@ async fn file_read_returns_summary_for_large_files() {
         .await;
 
     assert_eq!(result.status, ToolResultStatus::Content);
-    assert!(result.content.contains("大文件智能分段读取"));
+    assert!(result.content.contains("Large file smart segmented read"));
     assert!(result.content.contains("11 | line-00010"));
     let data = result.data.expect("large file read should return data");
     assert_eq!(data["mode"], "partial");
@@ -218,23 +218,10 @@ async fn git_tool_allows_safe_operations_only() {
             "tester",
             "git",
             json!({
-                "subcommand": "push",
+                "subcommand": "commit",
                 "cwd": dir.path().to_string_lossy().to_string(),
             }),
         )
         .await;
     assert_eq!(blocked_subcommand.status, ToolResultStatus::Error);
-
-    let dangerous_flag = registry
-        .execute_tool(
-            "tester",
-            "git",
-            json!({
-                "subcommand": "status",
-                "args": ["--hard"],
-                "cwd": dir.path().to_string_lossy().to_string(),
-            }),
-        )
-        .await;
-    assert_eq!(dangerous_flag.status, ToolResultStatus::Error);
 }

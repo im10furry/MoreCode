@@ -85,8 +85,7 @@ impl RegexCache {
         if let Some(regex) = cache.get(pattern) {
             return Ok(regex.clone());
         }
-        let regex =
-            Regex::new(pattern).with_context(|| format!("无效的正则表达式: {}", pattern))?;
+        let regex = Regex::new(pattern).with_context(|| format!("无效的正则表达式: {pattern}"))?;
         cache.insert(pattern.to_string(), regex.clone());
         Ok(regex)
     }
@@ -228,7 +227,7 @@ pub fn estimate_tokens(text: &str) -> usize {
     let cjk_count = text.chars().filter(|ch| *ch >= '\u{2E80}').count();
     let other_count = char_count.saturating_sub(cjk_count);
 
-    cjk_count + ((other_count + 3) / 4)
+    cjk_count + other_count.div_ceil(4)
 }
 
 fn keep_all(raw_output: &str) -> FilteredResult {

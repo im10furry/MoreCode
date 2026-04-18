@@ -36,7 +36,7 @@ pub enum ConfigChangeEvent {
         var_name: String,
     },
     Reloaded {
-        config: AppConfig,
+        config: Box<AppConfig>,
     },
     ReloadFailed {
         error: ConfigError,
@@ -438,8 +438,8 @@ impl Drop for ConfigLoader {
 
 async fn process_notify_result(
     result: std::result::Result<Event, notify::Error>,
-    global_config_path: &PathBuf,
-    project_config_path: &PathBuf,
+    global_config_path: &Path,
+    project_config_path: &Path,
     config_change_tx: &broadcast::Sender<ConfigChangeEvent>,
     current_config: &Arc<RwLock<AppConfig>>,
 ) {
@@ -465,7 +465,9 @@ async fn process_notify_result(
             match ConfigLoader::load_with_paths(global_config_path, project_config_path).await {
                 Ok(config) => {
                     write_snapshot(current_config, config.clone());
-                    let _ = config_change_tx.send(ConfigChangeEvent::Reloaded { config });
+                    let _ = config_change_tx.send(ConfigChangeEvent::Reloaded {
+                        config: Box::new(config),
+                    });
                 }
                 Err(error) => {
                     let _ = config_change_tx.send(ConfigChangeEvent::ReloadFailed { error });

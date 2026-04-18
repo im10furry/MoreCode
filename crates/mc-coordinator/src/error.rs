@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use mc_agent::AgentError;
+use mc_agent::trait_def_min::AgentError;
 use mc_llm::LlmError;
 use thiserror::Error;
 

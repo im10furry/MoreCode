@@ -74,7 +74,7 @@ fn sample_project_context() -> ProjectContext {
             }],
         },
         tech_stack: TechStack {
-            language_version: "Rust 1.85+".to_string(),
+            language_version: "Rust 1.88+".to_string(),
             rust_edition: Some("2021".to_string()),
             framework: Some("Tokio".to_string()),
             database: None,
@@ -155,6 +155,8 @@ fn sample_project_context() -> ProjectContext {
             scan_duration_ms: 1_500,
             memory_version: 3,
             scanner_version: "1.0.0".to_string(),
+            scan_mode: "full".to_string(),
+            changed_files: Vec::new(),
         },
         root_path: "C:/repo/MoreCode".to_string(),
     }
@@ -165,6 +167,7 @@ fn sample_execution_plan() -> ExecutionPlan {
     ExecutionPlan {
         plan_id: "plan-1".to_string(),
         task_description: "Implement mc-core".to_string(),
+        summary: "Implement core task structures and validation".to_string(),
         parallel_groups: vec![ParallelGroup {
             id: "group-1".to_string(),
             name: "core".to_string(),
@@ -581,6 +584,8 @@ fn serde_json_compatibility_for_core_structs() {
         requires_testing: true,
         forced_agents: Some(vec![AgentType::Planner, AgentType::Coder]),
         constraints: vec!["no unwrap".to_string()],
+        details: Some("Verify serde compatibility for core task models".to_string()),
+        project_root: Some("C:/repo/MoreCode".to_string()),
         created_at: fixed_time(),
     };
 

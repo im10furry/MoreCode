@@ -135,7 +135,7 @@ fn glob_matches(pattern: &str, candidate: &str) -> bool {
 }
 
 fn regex_matches(pattern: &str, candidate: &str) -> bool {
-    Regex::new(&format!("^(?:{})$", pattern))
+    Regex::new(&format!("^(?:{pattern})$"))
         .map(|regex| regex.is_match(candidate))
         .unwrap_or_else(|_| pattern == candidate)
 }

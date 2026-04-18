@@ -228,4 +228,4 @@ Phase 4（前沿）:
 
 ## 许可证
 
-<!-- TODO: 添加许可证 -->
+[GNU General Public License v3.0](LICENSE)

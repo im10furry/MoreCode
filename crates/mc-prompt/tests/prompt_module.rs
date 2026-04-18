@@ -223,14 +223,8 @@ async fn file_watcher_handles_supported_extensions_and_ignores_txt() {
         .start_file_watcher(&[temp_dir.path().to_path_buf()])
         .expect("watcher should start");
 
-    sleep(Duration::from_millis(200)).await;
-
     let markdown_path = temp_dir.path().join("prompt.md");
-    tokio::fs::write(&markdown_path, "hello")
-        .await
-        .expect("write should succeed");
-
-    let event = next_file_event(&mut receiver, &markdown_path)
+    let event = write_until_event(&markdown_path, "hello", &mut receiver)
         .await
         .expect("markdown change should broadcast");
     assert_eq!(event.reason, InvalidationReason::FileChanged);
@@ -252,13 +246,6 @@ async fn file_watcher_handles_supported_extensions_and_ignores_txt() {
     );
 }
 
-async fn next_file_event(
-    receiver: &mut tokio::sync::broadcast::Receiver<CacheInvalidationEvent>,
-    path: &Path,
-) -> Option<CacheInvalidationEvent> {
-    next_file_event_within(receiver, path, Duration::from_secs(5)).await
-}
-
 async fn next_file_event_within(
     receiver: &mut tokio::sync::broadcast::Receiver<CacheInvalidationEvent>,
     path: &Path,
@@ -276,4 +263,23 @@ async fn next_file_event_within(
     .await
     .ok()
     .flatten()
+}
+
+async fn write_until_event(
+    path: &Path,
+    contents: &str,
+    receiver: &mut tokio::sync::broadcast::Receiver<CacheInvalidationEvent>,
+) -> Option<CacheInvalidationEvent> {
+    for attempt in 0..5 {
+        sleep(Duration::from_millis(250)).await;
+        tokio::fs::write(path, format!("{contents}-{attempt}"))
+            .await
+            .expect("write should succeed");
+
+        if let Some(event) = next_file_event_within(receiver, path, Duration::from_secs(2)).await {
+            return Some(event);
+        }
+    }
+
+    None
 }

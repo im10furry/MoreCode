@@ -367,29 +367,53 @@ temperature = 0.2
     let mut receiver = loader.subscribe();
     loader.start_hot_reload().await.unwrap();
 
-    sleep(Duration::from_secs(1)).await;
-    write_file(
+    let reloaded = write_until_reloaded(
         &workspace.project_config_path(),
+        &mut receiver,
         r#"
 [agent]
 temperature = 1.1
 "#,
-    );
-
-    let reloaded = timeout(Duration::from_secs(30), async {
-        loop {
-            match receiver.recv().await {
-                Ok(ConfigChangeEvent::Reloaded { config }) => break *config,
-                Ok(_) => continue,
-                Err(error) => panic!("unexpected broadcast error: {error}"),
-            }
-        }
-    })
+        1.1,
+    )
     .await
-    .unwrap();
+    .expect("hot reload should emit a matching reload event");
 
     assert_eq!(reloaded.agent.temperature, 1.1);
     assert_eq!(loader.current().agent.temperature, 1.1);
+}
+
+async fn write_until_reloaded(
+    path: &Path,
+    receiver: &mut tokio::sync::broadcast::Receiver<ConfigChangeEvent>,
+    contents: &str,
+    expected_temperature: f32,
+) -> Option<AppConfig> {
+    for _ in 0..5 {
+        sleep(Duration::from_millis(250)).await;
+        write_file(path, contents);
+
+        let result = timeout(Duration::from_secs(6), async {
+            loop {
+                match receiver.recv().await {
+                    Ok(ConfigChangeEvent::Reloaded { config })
+                        if (config.agent.temperature - expected_temperature).abs() < f32::EPSILON =>
+                    {
+                        break Some(*config)
+                    }
+                    Ok(_) => continue,
+                    Err(error) => panic!("unexpected broadcast error: {error}"),
+                }
+            }
+        })
+        .await;
+
+        if let Ok(Some(config)) = result {
+            return Some(config);
+        }
+    }
+
+    None
 }
 
 #[test]

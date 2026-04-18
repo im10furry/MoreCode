@@ -1,17 +1,20 @@
 [workspace]
 members = [
-    "crates/mc-agent",
-    "crates/mc-coordinator",
-    "crates/mc-core",
-    "crates/mc-config",
-    "crates/mc-context",
-    "crates/mc-communication",
-    "crates/mc-llm",
-    "crates/mc-memory",
-    "crates/mc-prompt",
-    "crates/mc-recursive",
-    "crates/mc-sandbox",
-    "crates/mc-tool",
+    "agent",
+    "cli",
+    "communication",
+    "config",
+    "context",
+    "coordinator",
+    "core",
+    "daemon",
+    "llm",
+    "memory",
+    "prompt",
+    "recursive",
+    "sandbox",
+    "tool",
+    "tui",
 ]
 resolver = "2"
 
@@ -33,15 +36,15 @@ hmac = "0.12.1"
 ignore = "0.4.24"
 lru = "0.16.2"
 metrics = "0.24.2"
-mc-agent = { path = "crates/mc-agent" }
-mc-config = { path = "crates/mc-config" }
-mc-context = { path = "crates/mc-context" }
-mc-core = { path = "crates/mc-core" }
-mc-llm = { path = "crates/mc-llm", default-features = false }
-mc-memory = { path = "crates/mc-memory" }
-mc-recursive = { path = "crates/mc-recursive" }
-mc-sandbox = { path = "crates/mc-sandbox" }
-mc-tool = { path = "crates/mc-tool" }
+mc-agent = { package = "agent", path = "agent" }
+mc-config = { package = "config", path = "config" }
+mc-context = { package = "context", path = "context" }
+mc-core = { package = "core", path = "core" }
+mc-llm = { package = "llm", path = "llm", default-features = false }
+mc-memory = { package = "memory", path = "memory" }
+mc-recursive = { package = "recursive", path = "recursive" }
+mc-sandbox = { package = "sandbox", path = "sandbox" }
+mc-tool = { package = "tool", path = "tool" }
 notify = "8.2.0"
 once_cell = "1.21.3"
 regex = "1.12.2"

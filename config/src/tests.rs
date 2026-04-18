@@ -397,7 +397,8 @@ async fn write_until_reloaded(
             loop {
                 match receiver.recv().await {
                     Ok(ConfigChangeEvent::Reloaded { config })
-                        if (config.agent.temperature - expected_temperature).abs() < f32::EPSILON =>
+                        if (config.agent.temperature - expected_temperature).abs()
+                            < f32::EPSILON =>
                     {
                         break Some(*config)
                     }

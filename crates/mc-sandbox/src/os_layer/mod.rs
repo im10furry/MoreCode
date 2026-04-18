@@ -1,5 +1,8 @@
-use std::fs::{File, OpenOptions};
+use std::fs::File;
 use std::path::Path;
+
+#[cfg(not(target_os = "linux"))]
+use std::fs::OpenOptions;
 
 use crate::error::SandboxError;
 use crate::path_restriction::normalize_path_no_symlink_escape;
@@ -54,7 +57,7 @@ pub fn open_file_no_symlinks(
 
     #[cfg(target_os = "linux")]
     {
-        return linux_open_file_no_symlinks(&normalized_root, &normalized_target, options);
+        linux_open_file_no_symlinks(&normalized_root, &normalized_target, options)
     }
 
     #[cfg(not(target_os = "linux"))]
@@ -116,7 +119,7 @@ fn linux_open_file_no_symlinks(
                 | ResolveFlag::RESOLVE_NO_SYMLINKS,
         );
 
-    openat2(&parent_fd, leaf, &how)
+    openat2(&parent_fd, leaf, how)
         .map(File::from)
         .map_err(|error| SandboxError::PathAccessDenied {
             path: target.to_path_buf(),

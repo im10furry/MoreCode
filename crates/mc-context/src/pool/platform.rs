@@ -1072,9 +1072,10 @@ mod tests {
         *cache.cached_signature.write().await = Some(vec![0u8; 32]);
         let second = cache
             .get_or_detect(|| async {
-                let mut info = PlatformInfo::default();
-                info.os = "fallback".into();
-                Ok(info)
+                Ok(PlatformInfo {
+                    os: "fallback".into(),
+                    ..PlatformInfo::default()
+                })
             })
             .await
             .unwrap();
@@ -1096,9 +1097,10 @@ mod tests {
         sleep(Duration::from_millis(25)).await;
         let second = cache
             .get_or_detect(|| async {
-                let mut info = PlatformInfo::default();
-                info.os = "second".into();
-                Ok(info)
+                Ok(PlatformInfo {
+                    os: "second".into(),
+                    ..PlatformInfo::default()
+                })
             })
             .await
             .unwrap();
@@ -1107,9 +1109,10 @@ mod tests {
         cache.invalidate().await;
         let third = cache
             .get_or_detect(|| async {
-                let mut info = PlatformInfo::default();
-                info.os = "third".into();
-                Ok(info)
+                Ok(PlatformInfo {
+                    os: "third".into(),
+                    ..PlatformInfo::default()
+                })
             })
             .await
             .unwrap();

@@ -108,8 +108,10 @@ mod tests {
 
     #[test]
     fn validate_rejects_invalid_depths() {
-        let mut config = RecursiveConfig::default();
-        config.max_depth = 0;
+        let mut config = RecursiveConfig {
+            max_depth: 0,
+            ..RecursiveConfig::default()
+        };
         assert!(config.validate().is_err());
 
         config.max_depth = 4;

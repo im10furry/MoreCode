@@ -428,7 +428,11 @@ fn format_duration_covers_all_branches() {
 fn semantic_color_count_and_theme_mapping_are_complete() {
     let theme = DarkTheme;
 
-    assert!(SemanticColor::COUNT >= 50);
+    let semantic_color_count = SemanticColor::COUNT;
+    assert!(
+        semantic_color_count >= 50,
+        "expected at least 50 semantic colors, found {semantic_color_count}"
+    );
     assert_eq!(SemanticColor::COUNT, SemanticColor::ALL.len());
 
     for semantic in SemanticColor::ALL {

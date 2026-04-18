@@ -1,4 +1,4 @@
-# MoreCode Agent
+# MoreCode Agent （开发中）
 
 > 基于 Rust + Ratatui 构建的多 Agent 编排 AI 编码助手，通过专职 Agent 协作将复杂编码任务自动化。
 

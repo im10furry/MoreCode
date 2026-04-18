@@ -1278,7 +1278,7 @@ impl PlatformDetector for DefaultPlatformDetector {
             .or_else(|_| {
                 std::env::var("TERM_PROGRAM").map(|shell| ShellType::from_shell_name(&shell))
             })
-            .unwrap_or_else(|_| {
+            .unwrap_or({
                 if cfg!(windows) {
                     ShellType::PowerShell
                 } else {

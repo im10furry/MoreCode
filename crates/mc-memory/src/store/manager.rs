@@ -653,7 +653,7 @@ impl MemoryManagerTrait for MemoryManager {
                 summary.push_str(&format!("- 语言: {}\n", snapshot.tech_stack.language));
                 summary.push_str(&format!("- 版本: {}\n", snapshot.tech_stack.edition));
                 for (name, version) in &snapshot.tech_stack.framework {
-                    summary.push_str(&format!("- {}: {}\n", name, version));
+                    summary.push_str(&format!("- {name}: {version}\n"));
                 }
                 summary.push_str("\n## 模块\n");
                 for module in &snapshot.module_map.modules {

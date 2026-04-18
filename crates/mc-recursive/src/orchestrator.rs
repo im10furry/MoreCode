@@ -58,7 +58,7 @@ impl RecursiveOrchestrator {
     /// Override the recursion depth while enforcing the design ceiling of 3 levels.
     pub fn with_max_depth(mut self, max: usize) -> Result<Self> {
         if max > 3 {
-            bail!("递归深度不能超过 3 层，请求值: {}", max);
+            bail!("递归深度不能超过 3 层，请求值: {max}");
         }
         self.config.max_depth = max;
         self.resource_limiter.max_depth = max;
@@ -227,43 +227,37 @@ impl RecursiveOrchestrator {
                     }
                 };
 
-                let token_usage = |agent: &dyn crate::sub_agent::SubAgentExecutor| agent.token_usage();
+                let token_usage =
+                    |agent: &dyn crate::sub_agent::SubAgentExecutor| agent.token_usage();
 
-                tokio::select! {
-                    _ = child_cancel.cancelled() => {
-                        SubAgentResult::cancelled(spec.clone(), token_usage(agent.as_ref()), start.elapsed())
-                    }
-                    timed = timeout(timeout_duration, agent.execute(child_cancel.clone())) => {
-                        match timed {
-                            Ok(Ok(output)) => SubAgentResult::completed(
+                match timeout(timeout_duration, agent.execute(child_cancel.clone())).await {
+                    Ok(Ok(output)) => SubAgentResult::completed(
+                        spec.clone(),
+                        output,
+                        token_usage(agent.as_ref()),
+                        start.elapsed(),
+                    ),
+                    Ok(Err(error)) => {
+                        if child_cancel.is_cancelled() {
+                            SubAgentResult::cancelled(
                                 spec.clone(),
-                                output,
                                 token_usage(agent.as_ref()),
                                 start.elapsed(),
-                            ),
-                            Ok(Err(error)) => {
-                                if child_cancel.is_cancelled() {
-                                    SubAgentResult::cancelled(
-                                        spec.clone(),
-                                        token_usage(agent.as_ref()),
-                                        start.elapsed(),
-                                    )
-                                } else {
-                                    SubAgentResult::failed(
-                                        spec.clone(),
-                                        token_usage(agent.as_ref()),
-                                        start.elapsed(),
-                                        error.to_string(),
-                                    )
-                                }
-                            }
-                            Err(_) => SubAgentResult::timed_out(
-                                spec,
+                            )
+                        } else {
+                            SubAgentResult::failed(
+                                spec.clone(),
                                 token_usage(agent.as_ref()),
                                 start.elapsed(),
-                            ),
+                                error.to_string(),
+                            )
                         }
                     }
+                    Err(_) => SubAgentResult::timed_out(
+                        spec,
+                        token_usage(agent.as_ref()),
+                        start.elapsed(),
+                    ),
                 }
             });
         }
@@ -273,7 +267,7 @@ impl RecursiveOrchestrator {
             tokio::select! {
                 _ = parent_cancel.cancelled() => {
                     debug!("parent cancellation received; waiting for child agents to stop cooperatively");
-                    let graceful = timeout(Duration::from_millis(50), async {
+                    let graceful = timeout(Duration::from_millis(250), async {
                         while join_set.join_next().await.is_some() {}
                     }).await;
                     if graceful.is_err() {
@@ -406,7 +400,7 @@ mod tests {
         SubAgentSpec::new(
             id,
             AgentType::Explorer,
-            format!("focus {}", id),
+            format!("focus {id}"),
             vec![PathBuf::from("src/auth.rs")],
             4_000,
             timeout_secs,

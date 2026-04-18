@@ -45,12 +45,11 @@ impl CognitivePipeline {
             .await?
             .with_handoff(Arc::clone(&handoff));
         let explorer_report = self.explorer.execute(&explorer_ctx).await?;
-        let project_context = handoff
-            .get::<ProjectContext>()
-            .await
-            .ok_or_else(|| AgentError::MissingContextData {
+        let project_context = handoff.get::<ProjectContext>().await.ok_or_else(|| {
+            AgentError::MissingContextData {
                 data_type: "ProjectContext".to_string(),
-            })?;
+            }
+        })?;
 
         let impact_ctx = self
             .impact_analyzer
@@ -58,12 +57,13 @@ impl CognitivePipeline {
             .await?
             .with_handoff(Arc::clone(&handoff));
         let impact_report_execution = self.impact_analyzer.execute(&impact_ctx).await?;
-        let impact_report = handoff
-            .get::<ImpactReport>()
-            .await
-            .ok_or_else(|| AgentError::MissingContextData {
-                data_type: "ImpactReport".to_string(),
-            })?;
+        let impact_report =
+            handoff
+                .get::<ImpactReport>()
+                .await
+                .ok_or_else(|| AgentError::MissingContextData {
+                    data_type: "ImpactReport".to_string(),
+                })?;
 
         let planner_ctx = self
             .planner
@@ -150,7 +150,10 @@ mod tests {
 
         let result = pipeline.execute(&task, &shared).await.expect("pipeline");
         assert!(result.project_context.structure.total_files > 0);
-        assert_eq!(result.impact_report.direct_impacts[0].file, "crates/core/src/lib.rs");
+        assert_eq!(
+            result.impact_report.direct_impacts[0].file,
+            "crates/core/src/lib.rs"
+        );
         assert!(!result.execution_plan.parallel_groups.is_empty());
 
         let requests = requests.lock().expect("requests");

@@ -46,7 +46,10 @@ impl LlmProvider for MockLlmProvider {
         _cancel_token: CancellationToken,
     ) -> Pin<Box<dyn Future<Output = Result<ChatResponse, LlmError>> + Send + '_>> {
         Box::pin(async move {
-            self.requests.lock().expect("request lock").push(request.clone());
+            self.requests
+                .lock()
+                .expect("request lock")
+                .push(request.clone());
             let schema_name = match &request.response_format {
                 Some(mc_llm::ResponseFormat::JsonSchema { name, .. }) => name.clone(),
                 _ => {

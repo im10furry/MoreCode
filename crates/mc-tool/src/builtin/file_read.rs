@@ -40,23 +40,30 @@ impl FileReadTool {
     ) -> ToolResult {
         let start = std::time::Instant::now();
         let path = PathBuf::from(path);
-        let workspace_root = match std::env::current_dir() {
-            Ok(root) => root,
-            Err(error) => return ToolResult::error(format!("无法获取工作目录: {error}")),
+        let access_root = if path.is_absolute() {
+            path.parent()
+                .map(Path::to_path_buf)
+                .unwrap_or_else(|| path.clone())
+        } else {
+            match std::env::current_dir() {
+                Ok(root) => root,
+                Err(error) => {
+                    return ToolResult::error(format!("failed to get current directory: {error}"));
+                }
+            }
         };
 
-        let file = match open_file_no_symlinks(&workspace_root, &path, SafeOpenOptions::read_only())
-        {
+        let file = match open_file_no_symlinks(&access_root, &path, SafeOpenOptions::read_only()) {
             Ok(file) => file,
-            Err(error) => return ToolResult::error(format!("无法访问文件: {error}")),
+            Err(error) => return ToolResult::error(format!("failed to open file: {error}")),
         };
         let metadata = match file.metadata() {
             Ok(metadata) => metadata,
-            Err(error) => return ToolResult::error(format!("无法读取文件元数据: {error}")),
+            Err(error) => return ToolResult::error(format!("failed to read metadata: {error}")),
         };
 
         if !metadata.is_file() {
-            return ToolResult::error("目标不是文件");
+            return ToolResult::error("target path is not a regular file");
         }
 
         if metadata.len() >= self.large_file_threshold {
@@ -69,12 +76,12 @@ impl FileReadTool {
         let mut file = tokio::fs::File::from_std(file);
         let mut bytes = Vec::new();
         if let Err(error) = file.read_to_end(&mut bytes).await {
-            return ToolResult::error(format!("读取文件失败: {error}"));
+            return ToolResult::error(format!("failed to read file: {error}"));
         }
 
         let content = match String::from_utf8(bytes) {
             Ok(content) => content,
-            Err(_) => return ToolResult::error("二进制文件暂不支持直接读取"),
+            Err(_) => return ToolResult::error("binary files are not supported"),
         };
 
         let total_lines = content.lines().count();
@@ -121,7 +128,7 @@ impl FileReadTool {
         let line_limit = limit.unwrap_or(self.default_line_count);
 
         if line_limit == 0 {
-            return ToolResult::error("limit 必须大于 0");
+            return ToolResult::error("limit must be greater than 0");
         }
 
         let mut lines = BufReader::new(tokio::fs::File::from_std(file)).lines();
@@ -146,7 +153,7 @@ impl FileReadTool {
                     total_lines += 1;
                 }
                 Ok(None) => break,
-                Err(_) => return ToolResult::error("大文件包含非 UTF-8 内容，无法按文本方式读取"),
+                Err(_) => return ToolResult::error("large file contains non UTF-8 text"),
             }
         }
 
@@ -163,7 +170,7 @@ impl FileReadTool {
             "tail_preview": tail_preview.into_iter().collect::<Vec<_>>(),
         });
         let summary_text = format!(
-            "大文件智能分段读取\n文件: {}\n大小: {} 字节\n总行数: {}\n请求范围: {} - {}\n返回行数: {}",
+            "Large file smart segmented read\nFile: {}\nSize: {} bytes\nTotal lines: {}\nRequested range: {} - {}\nReturned lines: {}",
             path.display(),
             file_size,
             total_lines,
@@ -172,7 +179,7 @@ impl FileReadTool {
             returned_lines,
         );
         let body = if selected_lines.is_empty() {
-            format!("{summary_text}\n\n当前范围内没有可返回的文本行。")
+            format!("{summary_text}\n\nNo lines were returned for the requested range.")
         } else {
             format!("{summary_text}\n\n{}", selected_lines.join("\n"))
         };
@@ -192,7 +199,7 @@ impl FileReadTool {
                 "summary": summary,
             }),
         )
-        .with_metadata("notice", "大文件已启用智能分段读取")
+        .with_metadata("notice", "large file segmented read enabled")
     }
 }
 
@@ -208,7 +215,7 @@ impl Tool for FileReadTool {
     }
 
     fn description(&self) -> &str {
-        "读取文件内容。超过 1MB 的大文件会返回摘要和指定行范围。"
+        "Read file content. Files larger than 1MB return a structured partial view."
     }
 
     fn execute(
@@ -218,7 +225,7 @@ impl Tool for FileReadTool {
         Box::pin(async move {
             let path = match params.get("path").and_then(serde_json::Value::as_str) {
                 Some(path) => path,
-                None => return ToolResult::error("缺少必需参数: path"),
+                None => return ToolResult::error("missing required parameter: path"),
             };
             let offset = params
                 .get("offset")
@@ -238,16 +245,16 @@ impl Tool for FileReadTool {
             "properties": {
                 "path": {
                     "type": "string",
-                    "description": "要读取的文件路径"
+                    "description": "Path to the target file"
                 },
                 "offset": {
                     "type": "integer",
-                    "description": "起始行号，从 0 开始",
+                    "description": "Zero-based starting line",
                     "default": 0
                 },
                 "limit": {
                     "type": "integer",
-                    "description": "读取行数，默认 200",
+                    "description": "Maximum number of lines to return",
                     "default": self.default_line_count
                 }
             },
@@ -274,7 +281,7 @@ impl Tool for FileReadTool {
     fn capability(&self) -> CapabilityDeclaration {
         CapabilityDeclaration::new(
             "file_read",
-            "读取工作区文件内容",
+            "Read file content",
             self.permission_level(),
             vec![Capability::ReadFile {
                 pattern: "**".to_string(),

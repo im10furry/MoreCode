@@ -78,17 +78,14 @@ impl MicroCompactor {
                     }
                     Err(error) => {
                         message.content = format!(
-                            "[Old tool result content cleared (was {} chars, persist failed: {})]",
-                            content_len, error
+                            "[Old tool result content cleared (was {content_len} chars, persist failed: {error})]"
                         );
                         stats.small_cleared += 1;
                     }
                 }
             } else {
-                message.content = format!(
-                    "[Old tool result content cleared (was {} chars)]",
-                    content_len
-                );
+                message.content =
+                    format!("[Old tool result content cleared (was {content_len} chars)]");
                 stats.small_cleared += 1;
             }
 

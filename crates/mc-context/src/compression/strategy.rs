@@ -67,8 +67,10 @@ impl CompressionCoordinator {
         }
 
         let (messages, dropped) = self.l4.truncate(messages);
-        let mut stats = CompactStats::default();
-        stats.dropped_messages = dropped;
+        let stats = CompactStats {
+            dropped_messages: dropped,
+            ..CompactStats::default()
+        };
 
         Some(CompressionResult {
             messages,

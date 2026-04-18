@@ -14,7 +14,7 @@ use crate::{
     tui::{PartialTuiConfig, TuiConfig},
 };
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct AppConfig {
     #[serde(default)]
     pub app: AppSettings,
@@ -38,24 +38,6 @@ pub struct AppConfig {
     pub tui: TuiConfig,
     #[serde(default)]
     pub cost: CostBudgetConfig,
-}
-
-impl Default for AppConfig {
-    fn default() -> Self {
-        Self {
-            app: AppSettings::default(),
-            coordinator: CoordinatorConfig::default(),
-            agent: AgentConfig::default(),
-            provider: ProviderConfig::default(),
-            memory: MemoryConfig::default(),
-            context: ContextConfig::default(),
-            sandbox: SandboxConfig::default(),
-            recursive: RecursiveConfig::default(),
-            daemon: DaemonConfig::default(),
-            tui: TuiConfig::default(),
-            cost: CostBudgetConfig::default(),
-        }
-    }
 }
 
 impl AppConfig {

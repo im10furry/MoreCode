@@ -1,4 +1,5 @@
 use std::io::Read;
+use std::path::PathBuf;
 
 use globset::{Glob, GlobMatcher};
 use mc_sandbox::os_layer::{open_file_no_symlinks, SafeOpenOptions};
@@ -26,13 +27,24 @@ impl SearchTool {
         max_results: usize,
     ) -> ToolResult {
         let start = std::time::Instant::now();
-        let workspace_root = match std::env::current_dir() {
-            Ok(root) => root,
-            Err(error) => return ToolResult::error(format!("无法获取工作目录: {error}")),
+        let search_root = {
+            let requested_root = PathBuf::from(path);
+            if requested_root.is_absolute() {
+                requested_root
+            } else {
+                match std::env::current_dir() {
+                    Ok(root) => root.join(requested_root),
+                    Err(error) => {
+                        return ToolResult::error(format!(
+                            "failed to get current directory: {error}"
+                        ));
+                    }
+                }
+            }
         };
         let regex = match Regex::new(pattern) {
             Ok(regex) => regex,
-            Err(error) => return ToolResult::error(format!("无效的正则表达式: {error}")),
+            Err(error) => return ToolResult::error(format!("invalid regex pattern: {error}")),
         };
         let include_matcher = match build_glob_matcher(include) {
             Ok(matcher) => matcher,
@@ -42,14 +54,17 @@ impl SearchTool {
         let mut matches = Vec::new();
         let mut truncated = false;
 
-        'entries: for entry in WalkDir::new(path).into_iter().filter_map(Result::ok) {
+        'entries: for entry in WalkDir::new(&search_root)
+            .into_iter()
+            .filter_map(Result::ok)
+        {
             if !entry.file_type().is_file() {
                 continue;
             }
             if let Some(matcher) = &include_matcher {
                 let relative = entry
                     .path()
-                    .strip_prefix(path)
+                    .strip_prefix(&search_root)
                     .ok()
                     .unwrap_or_else(|| entry.path());
                 if !matcher.is_match(relative) {
@@ -58,7 +73,7 @@ impl SearchTool {
             }
 
             let file = match open_file_no_symlinks(
-                &workspace_root,
+                &search_root,
                 entry.path(),
                 SafeOpenOptions::read_only(),
             ) {
@@ -87,10 +102,10 @@ impl SearchTool {
         }
 
         ToolResult::success_with_data(
-            format!("共找到 {} 条匹配", matches.len()),
+            format!("Found {} matches", matches.len()),
             json!({
                 "pattern": pattern,
-                "search_path": path,
+                "search_path": search_root.to_string_lossy(),
                 "matches": matches,
                 "total_matches": matches.len(),
                 "truncated": truncated,
@@ -112,7 +127,7 @@ impl Tool for SearchTool {
     }
 
     fn description(&self) -> &str {
-        "使用正则表达式搜索目录中的文本内容，支持文件名过滤。"
+        "Search for text with a regex and optional glob include filter."
     }
 
     fn execute(
@@ -122,7 +137,7 @@ impl Tool for SearchTool {
         Box::pin(async move {
             let pattern = match params.get("pattern").and_then(serde_json::Value::as_str) {
                 Some(pattern) => pattern,
-                None => return ToolResult::error("缺少必需参数: pattern"),
+                None => return ToolResult::error("missing required parameter: pattern"),
             };
             let path = params
                 .get("path")
@@ -145,20 +160,20 @@ impl Tool for SearchTool {
             "properties": {
                 "pattern": {
                     "type": "string",
-                    "description": "用于搜索内容的正则表达式"
+                    "description": "Regex pattern to search for"
                 },
                 "path": {
                     "type": "string",
-                    "description": "搜索起始目录",
+                    "description": "Root directory to search",
                     "default": "."
                 },
                 "include": {
                     "type": "string",
-                    "description": "文件名过滤模式，使用 glob 语法"
+                    "description": "Optional glob filter for file names"
                 },
                 "max_results": {
                     "type": "integer",
-                    "description": "最大返回结果数",
+                    "description": "Maximum number of matches to return",
                     "default": DEFAULT_MAX_RESULTS
                 }
             },
@@ -185,7 +200,7 @@ impl Tool for SearchTool {
     fn capability(&self) -> CapabilityDeclaration {
         CapabilityDeclaration::new(
             "search",
-            "在工作区中进行正则搜索",
+            "Search readable files",
             self.permission_level(),
             vec![Capability::ReadFile {
                 pattern: "**".to_string(),
@@ -198,7 +213,7 @@ fn build_glob_matcher(include: Option<&str>) -> Result<Option<GlobMatcher>, Stri
     match include {
         Some(pattern) => Glob::new(pattern)
             .map(|glob| Some(glob.compile_matcher()))
-            .map_err(|error| format!("无效的 include 过滤模式: {error}")),
+            .map_err(|error| format!("invalid include glob: {error}")),
         None => Ok(None),
     }
 }

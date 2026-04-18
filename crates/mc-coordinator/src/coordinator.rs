@@ -4,7 +4,8 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use chrono::{DateTime, Utc};
-use mc_agent::{Agent, AgentRegistry, AgentResult, ReviewVerdict, TestReport};
+use mc_agent::registry_min::AgentRegistry;
+use mc_agent::trait_def_min::{Agent, AgentResult, ReviewVerdict, TestReport};
 use mc_context::{CodeConventions, ProjectContext, ProjectInfo, RiskArea, ScanMetadata, TechStack};
 use mc_core::{AgentType, ResultType, TaskResult};
 use mc_llm::{
@@ -220,7 +221,8 @@ impl Coordinator {
             });
         }
 
-        self.set_phase(ExecutionPhase::EvaluatingComplexity, 0.5).await;
+        self.set_phase(ExecutionPhase::EvaluatingComplexity, 0.5)
+            .await;
         let evaluation = {
             let evaluator = self.complexity_evaluator.read().await;
             evaluator.evaluate_with_details(&intent, project_ctx.as_ref())
@@ -232,7 +234,9 @@ impl Coordinator {
         let budget = self.allocate_budget(&agents, &evaluation.route_level);
 
         self.set_phase(ExecutionPhase::Dispatching, 0.75).await;
-        let results = self.dispatch_tasks_streaming(&agents, &intent, &budget).await?;
+        let results = self
+            .dispatch_tasks_streaming(&agents, &intent, &budget)
+            .await?;
 
         self.set_phase(ExecutionPhase::Integrating, 0.9).await;
         let integration = self
@@ -260,7 +264,10 @@ impl Coordinator {
         Ok(response)
     }
 
-    pub async fn handle_daemon_task(&self, task: DaemonTask) -> Result<TaskResult, CoordinatorError> {
+    pub async fn handle_daemon_task(
+        &self,
+        task: DaemonTask,
+    ) -> Result<TaskResult, CoordinatorError> {
         let shared_context = self
             .project_context
             .as_ref()
@@ -269,13 +276,19 @@ impl Coordinator {
         match task.route_level {
             RouteLevel::Simple => {
                 let coder = self.create_agent(AgentType::Coder)?;
-                coder.execute_with_context(&task.description, shared_context).await.map_err(Into::into)
+                coder
+                    .execute_with_context(&task.description, shared_context)
+                    .await
+                    .map_err(Into::into)
             }
             RouteLevel::Medium => {
                 let planner = self.create_agent(AgentType::Planner)?;
                 let plan = planner.plan(&task.description, shared_context).await?;
                 let coder = self.create_agent(AgentType::Coder)?;
-                coder.execute_plan(plan, shared_context).await.map_err(Into::into)
+                coder
+                    .execute_plan(plan, shared_context)
+                    .await
+                    .map_err(Into::into)
             }
             _ => self.dispatch_daemon_complex(task, shared_context).await,
         }
@@ -283,7 +296,7 @@ impl Coordinator {
 
     pub async fn load_project_memory(
         &self,
-        project_root: &PathBuf,
+        project_root: &Path,
     ) -> Result<Option<ProjectContext>, CoordinatorError> {
         Ok(Self::load_project_memory_async(project_root, &self.config).await)
     }
@@ -316,8 +329,7 @@ impl Coordinator {
 Return both the inferred intent and any clarification questions.\n\
 Do not add facts that are not supported by the request.\n\
 If the request is actionable without clarification, return null for clarifications.\n\n\
-User request:\n{}",
-            request
+User request:\n{request}"
         );
 
         let response = self
@@ -350,7 +362,8 @@ User request:\n{}",
             .await?;
 
         let raw = response.message.content.to_text();
-        self.parse_or_repair_json("intent_analysis", request, &raw).await
+        self.parse_or_repair_json("intent_analysis", request, &raw)
+            .await
     }
 
     async fn parse_or_repair_json<T>(
@@ -372,10 +385,9 @@ Requirements:\n\
 1. Only use facts explicitly present in the text.\n\
 2. Use null when a field cannot be determined.\n\
 3. Do not explain the answer.\n\n\
-Original user request:\n{}\n\n\
-Schema name: {}\n\n\
-Source text:\n{}",
-                    user_request, schema_name, raw
+Original user request:\n{user_request}\n\n\
+Schema name: {schema_name}\n\n\
+Source text:\n{raw}"
                 );
 
                 let repaired = self
@@ -403,10 +415,12 @@ Source text:\n{}",
                     .content
                     .to_text();
 
-                serde_json::from_str(&repaired).map_err(|repair_err| CoordinatorError::IntentParseFailed {
-                    schema: schema_name.to_string(),
-                    first_error: first_err.to_string(),
-                    repair_error: repair_err.to_string(),
+                serde_json::from_str(&repaired).map_err(|repair_err| {
+                    CoordinatorError::IntentParseFailed {
+                        schema: schema_name.to_string(),
+                        first_error: first_err.to_string(),
+                        repair_error: repair_err.to_string(),
+                    }
                 })
             }
         }
@@ -459,7 +473,10 @@ Source text:\n{}",
                     AgentType::Coder | AgentType::Research => 2u32,
                     _ => 1u32,
                 };
-                (*agent_type, (total_budget * weight / total_weight).max(1_000))
+                (
+                    *agent_type,
+                    (total_budget * weight / total_weight).max(1_000),
+                )
             })
             .collect()
     }
@@ -589,9 +606,12 @@ Source text:\n{}",
         }
 
         if let Some(project_context) = &ctx.project_context {
-            changed_files.extend(project_context.notes.iter().filter_map(|note| {
-                note.strip_prefix("Focus file: ").map(ToOwned::to_owned)
-            }));
+            changed_files.extend(
+                project_context
+                    .notes
+                    .iter()
+                    .filter_map(|note| note.strip_prefix("Focus file: ").map(ToOwned::to_owned)),
+            );
         }
 
         let mut changed_files = changed_files.into_iter().collect::<Vec<_>>();
@@ -620,7 +640,10 @@ Source text:\n{}",
         ];
 
         if !integration.changed_files.is_empty() {
-            lines.push(format!("Changed files: {}", integration.changed_files.join(", ")));
+            lines.push(format!(
+                "Changed files: {}",
+                integration.changed_files.join(", ")
+            ));
         }
 
         if !integration.test_results.is_empty() {
@@ -628,7 +651,10 @@ Source text:\n{}",
         }
 
         if !integration.review_issues.is_empty() {
-            lines.push(format!("Review issues: {}", integration.review_issues.join("; ")));
+            lines.push(format!(
+                "Review issues: {}",
+                integration.review_issues.join("; ")
+            ));
         }
 
         if integration.total_duration_ms > 0 {
@@ -685,11 +711,15 @@ Source text:\n{}",
                     last_result = if let Some(plan) = plan.clone() {
                         agent.execute_plan(plan, shared_context).await?
                     } else {
-                        agent.execute_with_context(&task.description, shared_context).await?
+                        agent
+                            .execute_with_context(&task.description, shared_context)
+                            .await?
                     };
                 }
                 _ => {
-                    last_result = agent.execute_with_context(&task.description, shared_context).await?;
+                    last_result = agent
+                        .execute_with_context(&task.description, shared_context)
+                        .await?;
                 }
             }
         }
@@ -698,7 +728,9 @@ Source text:\n{}",
     }
 
     fn create_agent(&self, agent_type: AgentType) -> Result<Arc<dyn Agent>, CoordinatorError> {
-        self.agent_registry.create_agent(agent_type).map_err(Into::into)
+        self.agent_registry
+            .create_agent(agent_type)
+            .map_err(Into::into)
     }
 
     async fn begin_execution(&self) {
@@ -737,7 +769,10 @@ Source text:\n{}",
         Ok(ComplexityConfig::default())
     }
 
-    fn load_project_memory_sync(project_root: &Path, config: &CoordinatorConfig) -> Option<ProjectContext> {
+    fn load_project_memory_sync(
+        project_root: &Path,
+        config: &CoordinatorConfig,
+    ) -> Option<ProjectContext> {
         let memory_dir = project_root.join(".assistant-memory");
         let meta_path = memory_dir.join("memory-meta.json");
         if !meta_path.exists() {
@@ -799,13 +834,17 @@ Source text:\n{}",
         }
 
         let overview = std::fs::read_to_string(memory_dir.join("project-overview.md")).ok();
-        let tech_stack = read_optional_json_sync::<TechStack>(&memory_dir.join("tech-stack.json")).unwrap_or_default();
-        let conventions =
-            read_optional_json_sync::<CodeConventions>(&memory_dir.join("conventions.json")).unwrap_or_default();
-        let risk_areas = read_optional_json_sync::<Vec<RiskArea>>(&memory_dir.join("risk-areas.json"))
+        let tech_stack = read_optional_json_sync::<TechStack>(&memory_dir.join("tech-stack.json"))
             .unwrap_or_default();
+        let conventions =
+            read_optional_json_sync::<CodeConventions>(&memory_dir.join("conventions.json"))
+                .unwrap_or_default();
+        let risk_areas =
+            read_optional_json_sync::<Vec<RiskArea>>(&memory_dir.join("risk-areas.json"))
+                .unwrap_or_default();
         let scan_metadata =
-            read_optional_json_sync::<ScanMetadata>(&memory_dir.join("scan-metadata.json")).unwrap_or_default();
+            read_optional_json_sync::<ScanMetadata>(&memory_dir.join("scan-metadata.json"))
+                .unwrap_or_default();
 
         if overview.is_none()
             && tech_stack == TechStack::default()
@@ -852,9 +891,7 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::{Arc, Mutex};
 
-    use mc_llm::{
-        CacheCapability, ChatResponse, FinishReason, ModelInfo, StreamEvent, TokenUsage,
-    };
+    use mc_llm::{CacheCapability, ChatResponse, FinishReason, ModelInfo, StreamEvent, TokenUsage};
     use tempfile::TempDir;
 
     use super::*;
@@ -915,7 +952,8 @@ mod tests {
             &self,
             _request: ChatRequest,
             _cancel_token: CancellationToken,
-        ) -> Pin<Box<dyn Future<Output = Result<ChatResponse, mc_llm::LlmError>> + Send + '_>> {
+        ) -> Pin<Box<dyn Future<Output = Result<ChatResponse, mc_llm::LlmError>> + Send + '_>>
+        {
             Box::pin(async move {
                 let content = self.next_response()?;
                 Ok(ChatResponse {
@@ -962,7 +1000,8 @@ mod tests {
         fn list_models(
             &self,
             _cancel_token: CancellationToken,
-        ) -> Pin<Box<dyn Future<Output = Result<Vec<ModelInfo>, mc_llm::LlmError>> + Send + '_>> {
+        ) -> Pin<Box<dyn Future<Output = Result<Vec<ModelInfo>, mc_llm::LlmError>> + Send + '_>>
+        {
             Box::pin(async move { Ok(vec![self.model_info.clone()]) })
         }
 

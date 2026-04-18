@@ -2,12 +2,11 @@ use serde::de::DeserializeOwned;
 use serde_json::Value;
 use tokio_util::sync::CancellationToken;
 
-use mc_llm::{
-    ChatMessage, ChatRequest, FinishReason, LlmProvider, MessageRole, ResponseFormat,
-};
+use mc_llm::{ChatMessage, ChatRequest, FinishReason, LlmProvider, MessageRole, ResponseFormat};
 
 use crate::AgentError;
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn complete_json<T>(
     provider: &dyn LlmProvider,
     model_id: &str,
@@ -52,9 +51,10 @@ where
     }
 
     let content = response.message.content.to_text();
-    let parsed = serde_json::from_str::<T>(&content).map_err(|error| AgentError::LlmParseError {
-        message: error.to_string(),
-    })?;
+    let parsed =
+        serde_json::from_str::<T>(&content).map_err(|error| AgentError::LlmParseError {
+            message: error.to_string(),
+        })?;
 
     Ok((parsed, response.usage.total_tokens))
 }

@@ -110,20 +110,27 @@ impl ComplexityEvaluator {
     }
 
     pub fn from_file(path: &Path) -> Result<Self, CoordinatorError> {
-        let content = std::fs::read_to_string(path)
-            .map_err(|err| CoordinatorError::ConfigLoadFailed(path.to_path_buf(), err.to_string()))?;
+        let content = std::fs::read_to_string(path).map_err(|err| {
+            CoordinatorError::ConfigLoadFailed(path.to_path_buf(), err.to_string())
+        })?;
 
         let config = match path.extension().and_then(|ext| ext.to_str()) {
-            Some("toml") => toml::from_str(&content)
-                .map_err(|err| CoordinatorError::ConfigParseFailed(path.to_path_buf(), err.to_string()))?,
-            _ => serde_json::from_str(&content)
-                .map_err(|err| CoordinatorError::ConfigParseFailed(path.to_path_buf(), err.to_string()))?,
+            Some("toml") => toml::from_str(&content).map_err(|err| {
+                CoordinatorError::ConfigParseFailed(path.to_path_buf(), err.to_string())
+            })?,
+            _ => serde_json::from_str(&content).map_err(|err| {
+                CoordinatorError::ConfigParseFailed(path.to_path_buf(), err.to_string())
+            })?,
         };
 
         Ok(Self::new(config))
     }
 
-    pub fn evaluate(&self, intent: &UserIntent, project_ctx: Option<&ProjectContext>) -> RouteLevel {
+    pub fn evaluate(
+        &self,
+        intent: &UserIntent,
+        project_ctx: Option<&ProjectContext>,
+    ) -> RouteLevel {
         self.evaluate_with_details(intent, project_ctx).route_level
     }
 
@@ -152,7 +159,11 @@ impl ComplexityEvaluator {
         }
 
         let mut score = 0;
-        if let Some(base) = self.config.llm_complexity_weights.get(&intent.estimated_complexity) {
+        if let Some(base) = self
+            .config
+            .llm_complexity_weights
+            .get(&intent.estimated_complexity)
+        {
             score += (*base as f32 * self.config.llm_weight_multiplier) as i32;
         }
 
@@ -273,7 +284,11 @@ fn project_size_hint(project_ctx: &ProjectContext) -> usize {
         .git_exclude(false)
         .build()
         .filter_map(Result::ok)
-        .filter(|entry| entry.file_type().is_some_and(|file_type| file_type.is_file()))
+        .filter(|entry| {
+            entry
+                .file_type()
+                .is_some_and(|file_type| file_type.is_file())
+        })
         .take(5_000)
         .count()
 }

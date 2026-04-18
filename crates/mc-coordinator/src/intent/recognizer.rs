@@ -91,12 +91,36 @@ pub fn keyword_fast_path(request: &str) -> Option<UserIntent> {
     }
 
     let patterns: &[(&[&str], TaskType, Complexity)] = &[
-        (&["修复 typo", "fix typo", "typo"], TaskType::BugFix, Complexity::Simple),
-        (&["格式化代码", "format code", "lint"], TaskType::Refactoring, Complexity::Simple),
-        (&["添加注释", "write docs", "update docs"], TaskType::Documentation, Complexity::Simple),
-        (&["运行测试", "add test", "write test"], TaskType::Testing, Complexity::Simple),
-        (&["深入排查", "deep debug", "root cause"], TaskType::Debugging, Complexity::Complex),
-        (&["先调研", "research first"], TaskType::Other("research".into()), Complexity::Research),
+        (
+            &["修复 typo", "fix typo", "typo"],
+            TaskType::BugFix,
+            Complexity::Simple,
+        ),
+        (
+            &["格式化代码", "format code", "lint"],
+            TaskType::Refactoring,
+            Complexity::Simple,
+        ),
+        (
+            &["添加注释", "write docs", "update docs"],
+            TaskType::Documentation,
+            Complexity::Simple,
+        ),
+        (
+            &["运行测试", "add test", "write test"],
+            TaskType::Testing,
+            Complexity::Simple,
+        ),
+        (
+            &["深入排查", "deep debug", "root cause"],
+            TaskType::Debugging,
+            Complexity::Complex,
+        ),
+        (
+            &["先调研", "research first"],
+            TaskType::Other("research".into()),
+            Complexity::Research,
+        ),
     ];
 
     for (keywords, task_type, complexity) in patterns {
@@ -108,7 +132,10 @@ pub fn keyword_fast_path(request: &str) -> Option<UserIntent> {
                 target_files,
                 domains: infer_domains(request),
                 estimated_complexity: *complexity,
-                needs_project_context: matches!(complexity, Complexity::Medium | Complexity::Complex | Complexity::Research),
+                needs_project_context: matches!(
+                    complexity,
+                    Complexity::Medium | Complexity::Complex | Complexity::Research
+                ),
                 needs_research: matches!(complexity, Complexity::Research),
             });
         }
@@ -119,28 +146,36 @@ pub fn keyword_fast_path(request: &str) -> Option<UserIntent> {
 
 pub fn keyword_fallback(request: &str) -> UserIntent {
     let normalized = request.to_lowercase();
-    let task_type = if normalized.contains("bug") || normalized.contains("修复") || normalized.contains("fix") {
-        TaskType::BugFix
-    } else if normalized.contains("重构") || normalized.contains("refactor") {
-        TaskType::Refactoring
-    } else if normalized.contains("测试") || normalized.contains("test") {
-        TaskType::Testing
-    } else if normalized.contains("文档") || normalized.contains("doc") {
-        TaskType::Documentation
-    } else if normalized.contains("review") || normalized.contains("审查") {
-        TaskType::CodeReview
-    } else if normalized.contains("debug") || normalized.contains("排查") {
-        TaskType::Debugging
-    } else {
-        TaskType::FeatureDevelopment
-    };
+    let task_type =
+        if normalized.contains("bug") || normalized.contains("修复") || normalized.contains("fix")
+        {
+            TaskType::BugFix
+        } else if normalized.contains("重构") || normalized.contains("refactor") {
+            TaskType::Refactoring
+        } else if normalized.contains("测试") || normalized.contains("test") {
+            TaskType::Testing
+        } else if normalized.contains("文档") || normalized.contains("doc") {
+            TaskType::Documentation
+        } else if normalized.contains("review") || normalized.contains("审查") {
+            TaskType::CodeReview
+        } else if normalized.contains("debug") || normalized.contains("排查") {
+            TaskType::Debugging
+        } else {
+            TaskType::FeatureDevelopment
+        };
 
     let needs_research = normalized.contains("research") || normalized.contains("调研");
     let estimated_complexity = if needs_research {
         Complexity::Research
-    } else if normalized.contains("架构") || normalized.contains("跨模块") || normalized.contains("multi-module") {
+    } else if normalized.contains("架构")
+        || normalized.contains("跨模块")
+        || normalized.contains("multi-module")
+    {
         Complexity::Complex
-    } else if normalized.contains("新增") || normalized.contains("add") || normalized.contains("implement") {
+    } else if normalized.contains("新增")
+        || normalized.contains("add")
+        || normalized.contains("implement")
+    {
         Complexity::Medium
     } else {
         Complexity::Simple
@@ -153,7 +188,8 @@ pub fn keyword_fallback(request: &str) -> UserIntent {
         target_files: target_files.clone(),
         domains: infer_domains(request),
         estimated_complexity,
-        needs_project_context: !target_files.is_empty() || !matches!(estimated_complexity, Complexity::Simple),
+        needs_project_context: !target_files.is_empty()
+            || !matches!(estimated_complexity, Complexity::Simple),
         needs_research,
     }
 }
@@ -162,7 +198,9 @@ pub fn extract_target_files(request: &str) -> Vec<String> {
     request
         .split_whitespace()
         .map(|token| {
-            token.trim_matches(|ch: char| matches!(ch, ',' | '.' | '"' | '\'' | '(' | ')' | '[' | ']'))
+            token.trim_matches(|ch: char| {
+                matches!(ch, ',' | '.' | '"' | '\'' | '(' | ')' | '[' | ']')
+            })
         })
         .filter(|token| {
             token.contains('/')

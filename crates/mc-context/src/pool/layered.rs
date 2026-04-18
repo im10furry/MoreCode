@@ -43,8 +43,10 @@ pub struct ContextPool {
 
 impl ContextPool {
     pub fn new(platform_info: Arc<PlatformInfo>, global_token_budget: usize) -> Self {
-        let mut budget = ContextBudget::default();
-        budget.global_tokens = global_token_budget;
+        let budget = ContextBudget {
+            global_tokens: global_token_budget,
+            ..ContextBudget::default()
+        };
 
         Self {
             platform_info,
@@ -75,16 +77,13 @@ impl ContextPool {
 
         let mut sections = vec![platform];
         if !knowledge.is_empty() {
-            sections.push(format!("## Project Knowledge\n\n{}", knowledge));
+            sections.push(format!("## Project Knowledge\n\n{knowledge}"));
         }
         if !task.is_empty() {
-            sections.push(format!("## Task Context\n\n{}", task));
+            sections.push(format!("## Task Context\n\n{task}"));
         }
         if let Some(agent_ctx) = agent_ctx {
-            sections.push(format!(
-                "## {} Specific Context\n\n{}",
-                agent_type, agent_ctx
-            ));
+            sections.push(format!("## {agent_type} Specific Context\n\n{agent_ctx}"));
         }
 
         sections.join("\n\n")

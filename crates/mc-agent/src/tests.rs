@@ -384,7 +384,7 @@ fn sample_project_context() -> ProjectContext {
             modules: Vec::new(),
         },
         tech_stack: TechStack {
-            language_version: "1.85".to_string(),
+            language_version: "1.88".to_string(),
             rust_edition: Some("2021".to_string()),
             framework: None,
             database: None,

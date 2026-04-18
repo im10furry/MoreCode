@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 license = "MIT"
 authors = ["MoreCode Contributors"]
-rust-version = "1.85"
+rust-version = "1.88"
 
 [lib]
 path = "src/lib_specialized.rs"

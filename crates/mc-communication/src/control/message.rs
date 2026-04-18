@@ -7,7 +7,7 @@ pub enum ControlMessage {
         task_id: String,
         agent_type: AgentType,
         task: SubTask,
-        context: AgentExecutionReport,
+        context: Box<AgentExecutionReport>,
         token_budget: u64,
     },
     Cancel {
@@ -42,7 +42,7 @@ mod tests {
                 task_id: "task-1".to_string(),
                 agent_type: AgentType::Coder,
                 task: sample_subtask(AgentType::Coder),
-                context: sample_report(),
+                context: Box::new(sample_report()),
                 token_budget: 4_096,
             },
             ControlMessage::Cancel {

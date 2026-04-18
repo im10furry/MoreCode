@@ -131,7 +131,7 @@ pub fn check_destructive_patterns(parsed: &ParsedCommand) -> Option<String> {
             });
             let has_force = args
                 .iter()
-                .any(|arg| matches!(arg.as_str(), "-f" | "--force"));
+                .any(|arg| matches!(arg.as_str(), "-f" | "--force" | "-rf" | "-fr" | "-rRf"));
             let dangerous_targets = args
                 .iter()
                 .filter(|arg| !arg.starts_with('-'))
@@ -145,10 +145,7 @@ pub fn check_destructive_patterns(parsed: &ParsedCommand) -> Option<String> {
                 .collect::<Vec<_>>();
 
             if has_recursive && has_force && !dangerous_targets.is_empty() {
-                return Some(format!(
-                    "检测到递归强制删除危险目标: {:?}",
-                    dangerous_targets
-                ));
+                return Some(format!("检测到递归强制删除危险目标: {dangerous_targets:?}"));
             }
 
             None

@@ -13,7 +13,10 @@ pub enum AgentError {
     #[error("failed to parse structured output: {message}")]
     LlmParseError { message: String },
     #[error("execution failed for {agent_type}: {message}")]
-    ExecutionFailed { agent_type: AgentType, message: String },
+    ExecutionFailed {
+        agent_type: AgentType,
+        message: String,
+    },
     #[error("resource constraint violated: {message}")]
     ResourceConstraint { message: String },
     #[error("validation failed: {message}")]

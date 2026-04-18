@@ -30,7 +30,7 @@ jobs:
       - name: 安装 Rust 1.85
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.85.0
+          toolchain: 1.88.0
           components: rustfmt,clippy
 
       - name: 缓存 Cargo 依赖
@@ -41,9 +41,9 @@ jobs:
             ~/.cargo/registry/cache
             ~/.cargo/git/db
             ~/.cargo/git/checkouts
-          key: ${{ runner.os }}-cargo-deps-1.85.0-${{ hashFiles('Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-deps-1.88.0-${{ hashFiles('Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-deps-1.85.0-
+            ${{ runner.os }}-cargo-deps-1.88.0-
             ${{ runner.os }}-cargo-deps-
 
       - name: 恢复 target 缓存
@@ -51,10 +51,10 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: target
-          key: ${{ runner.os }}-target-check-1.85.0-${{ hashFiles('Cargo.lock', '**/Cargo.toml', 'rust-toolchain.toml', 'clippy.toml', 'rustfmt.toml') }}-${{ github.sha }}
+          key: ${{ runner.os }}-target-check-1.88.0-${{ hashFiles('Cargo.lock', '**/Cargo.toml', 'rust-toolchain.toml', 'clippy.toml', 'rustfmt.toml') }}-${{ github.sha }}
           restore-keys: |
-            ${{ runner.os }}-target-check-1.85.0-${{ hashFiles('Cargo.lock', '**/Cargo.toml', 'rust-toolchain.toml', 'clippy.toml', 'rustfmt.toml') }}-
-            ${{ runner.os }}-target-check-1.85.0-
+            ${{ runner.os }}-target-check-1.88.0-${{ hashFiles('Cargo.lock', '**/Cargo.toml', 'rust-toolchain.toml', 'clippy.toml', 'rustfmt.toml') }}-
+            ${{ runner.os }}-target-check-1.88.0-
             ${{ runner.os }}-target-check-
 
       - name: 检查代码格式
@@ -68,7 +68,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: target
-          key: ${{ runner.os }}-target-check-1.85.0-${{ hashFiles('Cargo.lock', '**/Cargo.toml', 'rust-toolchain.toml', 'clippy.toml', 'rustfmt.toml') }}-${{ github.sha }}
+          key: ${{ runner.os }}-target-check-1.88.0-${{ hashFiles('Cargo.lock', '**/Cargo.toml', 'rust-toolchain.toml', 'clippy.toml', 'rustfmt.toml') }}-${{ github.sha }}
 
   test:
     name: 测试 (${{ matrix.name }})
@@ -79,7 +79,7 @@ jobs:
       matrix:
         include:
           - name: stable
-            toolchain: 1.85.0
+            toolchain: 1.88.0
           - name: nightly
             toolchain: nightly
 
@@ -143,7 +143,7 @@ jobs:
       matrix:
         include:
           - name: stable
-            toolchain: 1.85.0
+            toolchain: 1.88.0
           - name: nightly
             toolchain: nightly
 

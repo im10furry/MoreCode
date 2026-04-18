@@ -46,19 +46,24 @@ impl Planner {
             .unwrap_or_else(|| path.to_string())
     }
 
-    fn create_subtasks(&self, ctx: &AgentContext, project_ctx: &ProjectContext, impact: &ImpactReport) -> (Vec<SubTask>, Vec<TaskDependency>) {
+    fn create_subtasks(
+        &self,
+        ctx: &AgentContext,
+        project_ctx: &ProjectContext,
+        impact: &ImpactReport,
+    ) -> (Vec<SubTask>, Vec<TaskDependency>) {
         let mut tasks = Vec::new();
         let mut deps = Vec::new();
         let mut task_by_module = HashMap::<String, String>::new();
-        let grouped = impact
-            .direct_impacts
-            .iter()
-            .fold(BTreeMap::<String, Vec<String>>::new(), |mut acc, change| {
+        let grouped = impact.direct_impacts.iter().fold(
+            BTreeMap::<String, Vec<String>>::new(),
+            |mut acc, change| {
                 acc.entry(Self::task_module(&change.file, project_ctx))
                     .or_default()
                     .push(change.file.clone());
                 acc
-            });
+            },
+        );
 
         for (index, (module, files)) in grouped.into_iter().enumerate() {
             let task_id = format!("T{}", index + 1);
@@ -66,7 +71,9 @@ impl Planner {
                 .direct_impacts
                 .iter()
                 .filter(|change| files.contains(&change.file))
-                .fold(RiskLevel::Low, |acc, change| RiskLevel::max(acc, change.risk_level));
+                .fold(RiskLevel::Low, |acc, change| {
+                    RiskLevel::max(acc, change.risk_level)
+                });
             let complexity = match risk {
                 RiskLevel::Low => Complexity::Simple,
                 RiskLevel::Medium => Complexity::Medium,
@@ -76,7 +83,8 @@ impl Planner {
                 id: task_id.clone(),
                 description: format!("Implement requested changes in `{module}`"),
                 target_files: files.clone(),
-                expected_output: "Updated implementation aligned with the impacted module".to_string(),
+                expected_output: "Updated implementation aligned with the impacted module"
+                    .to_string(),
                 token_budget: 2_000 + (files.len() as u32 * 600),
                 priority: index as u8,
                 estimated_complexity: complexity,
@@ -91,10 +99,9 @@ impl Planner {
         }
 
         for edge in &project_ctx.dependency_graph.edges {
-            if let (Some(upstream), Some(downstream)) = (
-                task_by_module.get(&edge.to),
-                task_by_module.get(&edge.from),
-            ) {
+            if let (Some(upstream), Some(downstream)) =
+                (task_by_module.get(&edge.to), task_by_module.get(&edge.from))
+            {
                 if upstream != downstream {
                     deps.push(TaskDependency {
                         upstream_task_id: upstream.clone(),
@@ -122,15 +129,21 @@ impl Planner {
         }
 
         let coding_ids = tasks.iter().map(|task| task.id.clone()).collect::<Vec<_>>();
-        let need_reviewer = impact.overall_risk_level.score() >= RiskLevel::Medium.score() || tasks.len() > 1;
-        let need_tester = ctx.task.requires_testing || impact.overall_risk_level.score() >= RiskLevel::Medium.score();
+        let need_reviewer =
+            impact.overall_risk_level.score() >= RiskLevel::Medium.score() || tasks.len() > 1;
+        let need_tester = ctx.task.requires_testing
+            || impact.overall_risk_level.score() >= RiskLevel::Medium.score();
 
         if need_reviewer {
             let reviewer_id = format!("T{}", tasks.len() + 1);
             tasks.push(SubTask {
                 id: reviewer_id.clone(),
                 description: "Review the implementation plan and risky changes".to_string(),
-                target_files: impact.direct_impacts.iter().map(|change| change.file.clone()).collect(),
+                target_files: impact
+                    .direct_impacts
+                    .iter()
+                    .map(|change| change.file.clone())
+                    .collect(),
                 expected_output: "Review findings or approval".to_string(),
                 token_budget: 1_500,
                 priority: 250,
@@ -154,7 +167,11 @@ impl Planner {
             tasks.push(SubTask {
                 id: tester_id.clone(),
                 description: "Run focused verification for impacted behavior".to_string(),
-                target_files: impact.direct_impacts.iter().map(|change| change.file.clone()).collect(),
+                target_files: impact
+                    .direct_impacts
+                    .iter()
+                    .map(|change| change.file.clone())
+                    .collect(),
                 expected_output: "Focused test evidence".to_string(),
                 token_budget: 1_600,
                 priority: 251,
@@ -176,7 +193,11 @@ impl Planner {
         (tasks, deps)
     }
 
-    fn build_groups(&self, tasks: &[SubTask], deps: &[TaskDependency]) -> (Vec<ParallelGroup>, HashMap<String, Vec<String>>) {
+    fn build_groups(
+        &self,
+        tasks: &[SubTask],
+        deps: &[TaskDependency],
+    ) -> (Vec<ParallelGroup>, HashMap<String, Vec<String>>) {
         let task_ids = tasks.iter().map(|task| task.id.clone()).collect::<Vec<_>>();
         let layers = topological_layers(&task_ids, deps);
         let mut groups = Vec::new();
@@ -186,7 +207,10 @@ impl Planner {
             let mut by_agent = BTreeMap::<AgentType, Vec<SubTask>>::new();
             for task_id in layer {
                 if let Some(task) = tasks.iter().find(|task| task.id == task_id) {
-                    by_agent.entry(task.assigned_agent).or_default().push(task.clone());
+                    by_agent
+                        .entry(task.assigned_agent)
+                        .or_default()
+                        .push(task.clone());
                 }
             }
 
@@ -208,8 +232,12 @@ impl Planner {
 
         let mut group_deps = HashMap::<String, Vec<String>>::new();
         for dep in deps {
-            let Some(from) = task_to_group.get(&dep.upstream_task_id) else { continue };
-            let Some(to) = task_to_group.get(&dep.downstream_task_id) else { continue };
+            let Some(from) = task_to_group.get(&dep.upstream_task_id) else {
+                continue;
+            };
+            let Some(to) = task_to_group.get(&dep.downstream_task_id) else {
+                continue;
+            };
             if from == to {
                 continue;
             }
@@ -239,7 +267,12 @@ impl Planner {
             .collect()
     }
 
-    fn allocations(&self, project_ctx: &ProjectContext, impact: &ImpactReport, tasks: &[SubTask]) -> Vec<ContextAllocation> {
+    fn allocations(
+        &self,
+        project_ctx: &ProjectContext,
+        impact: &ImpactReport,
+        tasks: &[SubTask],
+    ) -> Vec<ContextAllocation> {
         tasks
             .iter()
             .map(|task| ContextAllocation {
@@ -259,7 +292,11 @@ impl Planner {
 
     pub fn validate_plan(&self, plan: &ExecutionPlan) -> Result<(), AgentError> {
         let layers = topological_layers(
-            &plan.sub_tasks.iter().map(|task| task.id.clone()).collect::<Vec<_>>(),
+            &plan
+                .sub_tasks
+                .iter()
+                .map(|task| task.id.clone())
+                .collect::<Vec<_>>(),
             &plan.dependencies,
         );
         if layers.iter().map(Vec::len).sum::<usize>() != plan.sub_tasks.len() {
@@ -296,7 +333,12 @@ impl Planner {
         Ok(())
     }
 
-    async fn enrich(&self, ctx: &AgentContext, plan: &ExecutionPlan, impact: &ImpactReport) -> Result<(PlannerLlmSummary, u32), AgentError> {
+    async fn enrich(
+        &self,
+        ctx: &AgentContext,
+        plan: &ExecutionPlan,
+        impact: &ImpactReport,
+    ) -> Result<(PlannerLlmSummary, u32), AgentError> {
         let prompt = format!(
             "Task: {}\nSubtasks: {}\nGroups: {}\nOverall risk: {:?}",
             ctx.task.user_input,
@@ -350,26 +392,26 @@ impl Agent for Planner {
         let project_ctx = project_ctx.ok_or_else(|| AgentError::MissingContextData {
             data_type: "ProjectContext".to_string(),
         })?;
-        Ok(AgentContext::new(task.clone(), shared, self.config.clone()).with_project_ctx(project_ctx))
+        Ok(AgentContext::new(task.clone(), shared, self.config.clone())
+            .with_project_ctx(project_ctx))
     }
 
     async fn execute(&self, ctx: &AgentContext) -> Result<AgentExecutionReport, AgentError> {
-        let project_ctx = ctx
-            .project_ctx
-            .as_deref()
-            .cloned()
-            .ok_or_else(|| AgentError::MissingContextData {
-                data_type: "ProjectContext".to_string(),
-            })?;
+        let project_ctx =
+            ctx.project_ctx
+                .as_deref()
+                .cloned()
+                .ok_or_else(|| AgentError::MissingContextData {
+                    data_type: "ProjectContext".to_string(),
+                })?;
         let impact = if let Some(impact) = ctx.impact_report.as_deref().cloned() {
             impact
         } else {
-            ctx.handoff
-                .get::<ImpactReport>()
-                .await
-                .ok_or_else(|| AgentError::MissingContextData {
+            ctx.handoff.get::<ImpactReport>().await.ok_or_else(|| {
+                AgentError::MissingContextData {
                     data_type: "ImpactReport".to_string(),
-                })?
+                }
+            })?
         };
 
         let (tasks, deps) = self.create_subtasks(ctx, &project_ctx, &impact);
@@ -398,8 +440,16 @@ impl Agent for Planner {
             },
             created_at: Utc::now(),
         };
-        plan.total_estimated_tokens = plan.sub_tasks.iter().map(|task| task.token_budget as usize).sum();
-        plan.total_estimated_duration_ms = plan.sub_tasks.iter().map(|task| task.token_budget as u64 * 3).sum();
+        plan.total_estimated_tokens = plan
+            .sub_tasks
+            .iter()
+            .map(|task| task.token_budget as usize)
+            .sum();
+        plan.total_estimated_duration_ms = plan
+            .sub_tasks
+            .iter()
+            .map(|task| task.token_budget as u64 * 3)
+            .sum();
         let (summary, llm_tokens) = self.enrich(ctx, &plan, &impact).await?;
         plan.summary = summary.summary;
         if let Some(reviewer) = plan
@@ -407,7 +457,9 @@ impl Agent for Planner {
             .iter_mut()
             .find(|allocation| allocation.agent_type == AgentType::Reviewer)
         {
-            reviewer.project_knowledge_subset.extend(summary.review_focus);
+            reviewer
+                .project_knowledge_subset
+                .extend(summary.review_focus);
         }
         plan.plan_metadata.generation_duration_ms = ctx.elapsed_ms();
         plan.plan_metadata.tokens_used = llm_tokens;
@@ -418,7 +470,11 @@ impl Agent for Planner {
         Ok(AgentExecutionReport::success(
             AgentType::Planner,
             &ctx.execution_id,
-            format!("Planner generated {} tasks across {} groups", plan.sub_tasks.len(), plan.parallel_groups.len()),
+            format!(
+                "Planner generated {} tasks across {} groups",
+                plan.sub_tasks.len(),
+                plan.parallel_groups.len()
+            ),
             result,
             ctx.elapsed_ms(),
             llm_tokens,

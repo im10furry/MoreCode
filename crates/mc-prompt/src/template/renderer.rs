@@ -109,8 +109,7 @@ fn parse_placeholders(template: &str) -> Result<Vec<Placeholder>, PromptCacheErr
                         let name = &template[index + 2..close_index];
                         if !is_valid_variable_name(name) {
                             return Err(PromptCacheError::TemplateRenderError(format!(
-                                "invalid template variable '{}'",
-                                name
+                                "invalid template variable '{name}'"
                             )));
                         }
 

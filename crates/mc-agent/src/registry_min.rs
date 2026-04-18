@@ -3,7 +3,7 @@ use std::sync::{Arc, RwLock};
 
 use mc_core::AgentType;
 
-use crate::{Agent, AgentError, DefaultAgent};
+use crate::trait_def_min::{Agent, AgentError, DefaultAgent};
 
 type Factory = dyn Fn() -> Arc<dyn Agent> + Send + Sync;
 

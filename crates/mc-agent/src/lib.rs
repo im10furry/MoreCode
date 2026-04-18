@@ -9,6 +9,8 @@ mod handoff;
 pub mod impact_analyzer;
 pub mod pipeline;
 pub mod planner;
+pub mod registry_min;
+pub mod trait_def_min;
 mod support;
 #[cfg(test)]
 mod test_support;

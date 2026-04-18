@@ -244,15 +244,26 @@ async fn file_watcher_handles_supported_extensions_and_ignores_txt() {
         .await
         .expect("write should succeed");
 
-    let no_event = timeout(Duration::from_millis(800), receiver.recv()).await;
-    assert!(no_event.is_err(), "txt updates should not broadcast");
+    let ignored_event =
+        next_file_event_within(&mut receiver, &ignored_path, Duration::from_millis(800)).await;
+    assert!(
+        ignored_event.is_none(),
+        "txt updates should not broadcast, got {ignored_event:?}"
+    );
 }
 
 async fn next_file_event(
     receiver: &mut tokio::sync::broadcast::Receiver<CacheInvalidationEvent>,
     path: &Path,
 ) -> Option<CacheInvalidationEvent> {
-    let deadline = Duration::from_secs(5);
+    next_file_event_within(receiver, path, Duration::from_secs(5)).await
+}
+
+async fn next_file_event_within(
+    receiver: &mut tokio::sync::broadcast::Receiver<CacheInvalidationEvent>,
+    path: &Path,
+    deadline: Duration,
+) -> Option<CacheInvalidationEvent> {
     timeout(deadline, async move {
         loop {
             match receiver.recv().await {

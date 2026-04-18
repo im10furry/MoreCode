@@ -1,5 +1,3 @@
-#![cfg(test)]
-
 use chrono::Utc;
 use mc_core::{AgentExecutionReport, AgentType, Complexity, ResultType, SubTask, TaskResult};
 

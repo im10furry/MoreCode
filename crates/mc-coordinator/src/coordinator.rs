@@ -1112,7 +1112,7 @@ mod tests {
         let temp = TempDir::new().expect("temp dir should exist");
         let coordinator = build_coordinator(temp.path(), Vec::new());
         let missing = coordinator
-            .load_project_memory(&temp.path().to_path_buf())
+            .load_project_memory(temp.path())
             .await
             .expect("load should not error");
         assert!(missing.is_none());
@@ -1147,7 +1147,7 @@ mod tests {
         .expect("tech stack should be written");
 
         let loaded = coordinator
-            .load_project_memory(&temp.path().to_path_buf())
+            .load_project_memory(temp.path())
             .await
             .expect("load should not error");
         assert!(loaded.is_some());

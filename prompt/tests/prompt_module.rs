@@ -246,13 +246,6 @@ async fn file_watcher_handles_supported_extensions_and_ignores_txt() {
     );
 }
 
-async fn next_file_event(
-    receiver: &mut tokio::sync::broadcast::Receiver<CacheInvalidationEvent>,
-    path: &Path,
-) -> Option<CacheInvalidationEvent> {
-    next_file_event_within(receiver, path, Duration::from_secs(5)).await
-}
-
 async fn next_file_event_within(
     receiver: &mut tokio::sync::broadcast::Receiver<CacheInvalidationEvent>,
     path: &Path,

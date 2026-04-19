@@ -18,7 +18,10 @@ pub use app::{AppConfig, AppSettings, PartialAppConfig, PartialAppSettings};
 pub use context::{ContextConfig, PartialContextConfig};
 pub use coordinator::{CoordinatorConfig, PartialCoordinatorConfig};
 pub use cost::{CostBudgetConfig, PartialCostBudgetConfig};
-pub use daemon::{DaemonConfig, PartialDaemonConfig, PartialQuietHours, QuietHours};
+pub use daemon::{
+    DaemonConfig, PartialDaemonConfig, PartialQuietHours, PartialTaskPileCloudConfig,
+    PartialTaskPileConfig, QuietHours, TaskPileCloudConfig, TaskPileConfig,
+};
 pub use error::{ConfigError, Result};
 pub use loader::{ConfigChangeEvent, ConfigLoader, FileChangeType};
 pub use memory::{MemoryConfig, PartialMemoryConfig};

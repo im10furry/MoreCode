@@ -4,10 +4,14 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use chrono::{DateTime, Utc};
+use mc_agent::{
+    AgentConfig, CognitivePipeline, Coder, Explorer, ImpactAnalyzer, Planner, Reviewer,
+    SharedResources, Tester,
+};
 use mc_agent::registry_min::AgentRegistry;
 use mc_agent::trait_def_min::{Agent, AgentResult, ReviewVerdict, TestReport};
 use mc_context::{CodeConventions, ProjectContext, ProjectInfo, RiskArea, ScanMetadata, TechStack};
-use mc_core::{AgentType, ResultType, TaskResult};
+use mc_core::{AgentType, ResultType, TaskDescription, TaskIntent, TaskResult};
 use mc_llm::{
     ChatMessage, ChatRequest, EventBus, InMemoryEventBus, LlmProvider, MessageRole, ResponseFormat,
 };
@@ -233,6 +237,22 @@ impl Coordinator {
         let agents = self.select_agents(&evaluation.route_level, &intent, project_ctx.is_some());
         let budget = self.allocate_budget(&agents, &evaluation.route_level);
 
+        if self.should_use_cognitive_pipeline(&intent, &evaluation) {
+            self.set_phase(ExecutionPhase::Dispatching, 0.75).await;
+            match self
+                .handle_with_cognitive_pipeline(request, &intent, &evaluation)
+                .await
+            {
+                Ok(response) => {
+                    self.finish_execution(ExecutionPhase::Completed, 1.0).await;
+                    return Ok(response);
+                }
+                Err(error) => {
+                    warn!(error = %error, "specialized cognitive pipeline failed, falling back to legacy coordinator path");
+                }
+            }
+        }
+
         self.set_phase(ExecutionPhase::Dispatching, 0.75).await;
         let results = self
             .dispatch_tasks_streaming(&agents, &intent, &budget)
@@ -299,6 +319,138 @@ impl Coordinator {
         project_root: &Path,
     ) -> Result<Option<ProjectContext>, CoordinatorError> {
         Ok(Self::load_project_memory_async(project_root, &self.config).await)
+    }
+
+    fn should_use_cognitive_pipeline(
+        &self,
+        intent: &UserIntent,
+        evaluation: &ComplexityEvaluation,
+    ) -> bool {
+        let supported_task = matches!(
+            intent.task_type,
+            crate::TaskType::FeatureDevelopment
+                | crate::TaskType::BugFix
+                | crate::TaskType::Refactoring
+                | crate::TaskType::Testing
+                | crate::TaskType::CodeReview
+                | crate::TaskType::Debugging
+        );
+
+        supported_task
+            && !intent.needs_research
+            && self.project_root.join("Cargo.toml").exists()
+            && !matches!(evaluation.route_level, RouteLevel::Simple)
+    }
+
+    async fn handle_with_cognitive_pipeline(
+        &self,
+        request: &str,
+        intent: &UserIntent,
+        evaluation: &ComplexityEvaluation,
+    ) -> Result<CoordinatorResponse, CoordinatorError> {
+        let task = self.build_cognitive_task(request, intent);
+        let shared = SharedResources::new(
+            self.project_root.clone(),
+            Arc::clone(&self.llm_client),
+        );
+        let pipeline = CognitivePipeline::new(
+            Explorer::new(AgentConfig::for_agent_type(AgentType::Explorer)),
+            ImpactAnalyzer::new(AgentConfig::for_agent_type(AgentType::ImpactAnalyzer)),
+            Planner::new(AgentConfig::for_agent_type(AgentType::Planner)),
+        )
+        .with_execution_agents(
+            Coder::new(AgentConfig::for_agent_type(AgentType::Coder)),
+            Reviewer::new(AgentConfig::for_agent_type(AgentType::Reviewer)),
+            Tester::new(AgentConfig::for_agent_type(AgentType::Tester)),
+        );
+
+        let started = Instant::now();
+        let result = pipeline
+            .execute_full(&task, &shared)
+            .await
+            .map_err(|error| CoordinatorError::Internal(error.to_string()))?;
+
+        let review_issues = result
+            .review_report
+            .findings
+            .iter()
+            .filter(|finding| {
+                matches!(
+                    finding.severity,
+                    mc_agent::ReviewSeverity::Blocker | mc_agent::ReviewSeverity::Warning
+                )
+            })
+            .map(|finding| finding.title.clone())
+            .collect::<Vec<_>>();
+        let changed_files = result
+            .coder_output
+            .changes
+            .iter()
+            .map(|change| change.path.clone())
+            .collect::<Vec<_>>();
+        let test_results = vec![TestReport {
+            summary: if result.tester_report.summary.stdout_tail.trim().is_empty() {
+                result.tester_execution.summary.clone()
+            } else {
+                result.tester_report.summary.stdout_tail.clone()
+            },
+            passed: result.tester_report.summary.passed,
+            failed: result.tester_report.summary.failed,
+            coverage: None,
+        }];
+
+        Ok(CoordinatorResponse {
+            response_type: ResponseType::Completed,
+            content: format!(
+                "Task type: {}\nRoute level: {:?}\nPipeline: cognitive\nPlanning: {}\nCoder: {}\nReviewer: {}\nTester: {}",
+                intent.task_type.as_key(),
+                evaluation.route_level,
+                result.planning.planner_report.summary,
+                result.coder_report.summary,
+                result.reviewer_execution.summary,
+                result.tester_execution.summary,
+            ),
+            changed_files,
+            review_issues,
+            test_results,
+            total_tokens_used: result.planning.explorer_report.metrics.tokens_used as usize
+                + result.planning.impact_report_execution.metrics.tokens_used as usize
+                + result.planning.planner_report.metrics.tokens_used as usize
+                + result.coder_report.metrics.tokens_used as usize
+                + result.reviewer_execution.metrics.tokens_used as usize
+                + result.tester_execution.metrics.tokens_used as usize,
+            total_duration_ms: started.elapsed().as_millis() as u64,
+        })
+    }
+
+    fn build_cognitive_task(&self, request: &str, intent: &UserIntent) -> TaskDescription {
+        TaskDescription {
+            id: Uuid::new_v4().to_string(),
+            user_input: request.to_string(),
+            intent: map_task_type_to_core(&intent.task_type),
+            complexity: intent.estimated_complexity,
+            affected_files: intent.target_files.clone(),
+            requires_new_dependency: matches!(intent.task_type, crate::TaskType::Configuration),
+            involves_architecture_change: matches!(intent.estimated_complexity, mc_core::Complexity::Complex),
+            needs_external_research: intent.needs_research,
+            requires_testing: matches!(
+                intent.task_type,
+                crate::TaskType::FeatureDevelopment
+                    | crate::TaskType::BugFix
+                    | crate::TaskType::Refactoring
+                    | crate::TaskType::Testing
+                    | crate::TaskType::Debugging
+            ),
+            forced_agents: None,
+            constraints: if intent.domains.is_empty() {
+                Vec::new()
+            } else {
+                vec![format!("domains={}", intent.domains.join(","))]
+            },
+            details: None,
+            project_root: Some(self.project_root.to_string_lossy().into_owned()),
+            created_at: Utc::now(),
+        }
     }
 
     async fn recognize_intent(&self, request: &str) -> Result<IntentAnalysis, CoordinatorError> {
@@ -883,6 +1035,23 @@ fn read_optional_json_sync<T: DeserializeOwned>(path: &Path) -> Option<T> {
         .and_then(|content| serde_json::from_str(&content).ok())
 }
 
+fn map_task_type_to_core(task_type: &crate::TaskType) -> TaskIntent {
+    match task_type {
+        crate::TaskType::FeatureDevelopment => TaskIntent::FeatureAddition,
+        crate::TaskType::BugFix => TaskIntent::BugFix,
+        crate::TaskType::Refactoring => TaskIntent::Refactoring,
+        crate::TaskType::Documentation => TaskIntent::Documentation,
+        crate::TaskType::Testing => TaskIntent::Other("testing".to_string()),
+        crate::TaskType::Configuration => TaskIntent::Other("configuration".to_string()),
+        crate::TaskType::CodeReview => TaskIntent::Other("code_review".to_string()),
+        crate::TaskType::Debugging => TaskIntent::Other("debugging".to_string()),
+        crate::TaskType::Other(value) if value.eq_ignore_ascii_case("research") => {
+            TaskIntent::Research
+        }
+        crate::TaskType::Other(value) => TaskIntent::Other(value.clone()),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::VecDeque;
@@ -1031,6 +1200,26 @@ mod tests {
         .expect("coordinator should build")
     }
 
+    fn build_rust_project() -> TempDir {
+        let temp = TempDir::new().expect("temp dir should exist");
+        std::fs::create_dir_all(temp.path().join("src")).expect("src dir");
+        std::fs::write(
+            temp.path().join("Cargo.toml"),
+            r#"[package]
+name = "pipeline-demo"
+version = "0.1.0"
+edition = "2021"
+"#,
+        )
+        .expect("cargo manifest");
+        std::fs::write(
+            temp.path().join("src/lib.rs"),
+            r#"pub fn compute() -> usize { 42 }"#,
+        )
+        .expect("lib file");
+        temp
+    }
+
     #[tokio::test]
     async fn recognize_intent_uses_keyword_fast_path_without_llm() {
         let temp = TempDir::new().expect("temp dir should exist");
@@ -1105,6 +1294,65 @@ mod tests {
         assert_eq!(response.response_type, ResponseType::Completed);
         assert!(!response.changed_files.is_empty());
         assert!(!response.content.is_empty());
+    }
+
+    #[tokio::test]
+    async fn handle_request_uses_cognitive_pipeline_when_project_is_available() {
+        let temp = build_rust_project();
+        let coordinator = build_coordinator(
+            temp.path(),
+            vec![
+                Ok(serde_json::json!({
+                    "project_summary": "Single-crate workspace",
+                    "architecture_name": "Library",
+                    "architecture_description": "A small Rust crate",
+                    "design_decisions": ["Keep the crate lightweight"],
+                    "notable_patterns": ["library"]
+                })
+                .to_string()),
+                Ok(serde_json::json!({
+                    "compatibility_notes": ["Review downstream users of compute"],
+                    "recommendations": ["Run cargo test"],
+                    "risk_assessment": []
+                })
+                .to_string()),
+                Ok(serde_json::json!({
+                    "summary": "Update compute implementation, then review and test",
+                    "review_focus": ["public function compute"]
+                })
+                .to_string()),
+                Ok(serde_json::json!({
+                    "summary": "Adjust compute implementation in src/lib.rs",
+                    "implementation_notes": ["Preserve the exported API"],
+                    "changes": [{
+                        "path": "src/lib.rs",
+                        "change_kind": "modify",
+                        "rationale": "The task targets the library implementation",
+                        "patch_preview": "",
+                        "acceptance_checks": ["cargo test"]
+                    }],
+                    "validation_steps": ["cargo test"],
+                    "risks": []
+                })
+                .to_string()),
+                Ok(serde_json::json!({
+                    "summary": "Review completed without blocking issues.",
+                    "verdict": "approved",
+                    "additional_findings": []
+                })
+                .to_string()),
+            ],
+        );
+
+        let response = coordinator
+            .handle_request("deep debug src/lib.rs")
+            .await
+            .expect("request should succeed");
+
+        assert_eq!(response.response_type, ResponseType::Completed);
+        assert!(response.content.contains("Pipeline: cognitive"));
+        assert!(response.changed_files.iter().any(|path| path == "src/lib.rs"));
+        assert_eq!(response.test_results.len(), 1);
     }
 
     #[tokio::test]

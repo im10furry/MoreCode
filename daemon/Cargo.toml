@@ -9,3 +9,14 @@ rust-version.workspace = true
 [lib]
 name = "mc_daemon"
 path = "src/lib.rs"
+
+[dependencies]
+chrono.workspace = true
+mc-config.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

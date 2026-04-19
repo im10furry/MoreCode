@@ -487,6 +487,7 @@ name = "cli"
 version = "0.1.0"
 dependencies = [
  "config",
+ "daemon",
  "memory",
  "serde_json",
  "tokio",
@@ -726,6 +727,15 @@ dependencies = [
 [[package]]
 name = "daemon"
 version = "0.1.0"
+dependencies = [
+ "chrono",
+ "config",
+ "serde",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tokio-util",
+]
 
 [[package]]
 name = "darling"

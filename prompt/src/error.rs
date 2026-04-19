@@ -24,6 +24,12 @@ pub enum PromptCacheError {
     #[error("template render error: {0}")]
     TemplateRenderError(String),
 
+    #[error("template lock mismatch: {0}")]
+    LockMismatch(String),
+
+    #[error("template lock format error: {0}")]
+    LockFormatError(String),
+
     #[error("file watcher error: {0}")]
     FileWatcherError(String),
 

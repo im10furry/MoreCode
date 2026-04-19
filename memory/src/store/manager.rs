@@ -74,6 +74,10 @@ impl MemoryManager {
         &self.memory_dir
     }
 
+    pub fn write_sender(&self) -> mpsc::Sender<MemoryWriteRequest> {
+        self.write_tx.clone()
+    }
+
     pub async fn run_write_loop(self: Arc<Self>, mut rx: mpsc::Receiver<MemoryWriteRequest>) {
         while let Some(request) = rx.recv().await {
             let result = self

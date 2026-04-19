@@ -54,6 +54,13 @@ impl TemplateManager {
         templates.get(template_id).cloned()
     }
 
+    pub async fn list_templates(&self) -> Vec<PromptTemplate> {
+        let templates = self.templates.read().await;
+        let mut values = templates.values().cloned().collect::<Vec<_>>();
+        values.sort_by(|left, right| left.id.cmp(&right.id));
+        values
+    }
+
     async fn load_templates_from_dir(
         &self,
         dir: &Path,

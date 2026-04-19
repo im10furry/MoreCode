@@ -1,1 +1,3 @@
-pub mod provider;
+mod provider;
+
+pub use provider::{MockProvider, MockResponse, MockStreamChunk};

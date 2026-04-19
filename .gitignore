@@ -47,3 +47,6 @@ rustup.log
 # Local build scratch directories
 /target-*/
 **/target-*/
+
+# Other files
+/设计文档

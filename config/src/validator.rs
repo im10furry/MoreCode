@@ -5,6 +5,7 @@ pub fn validate(config: &AppConfig) -> Result<()> {
     validate_coordinator(config)?;
     validate_agent(config)?;
     validate_provider(config)?;
+    validate_provider_default_exists(config)?;
     validate_memory(config)?;
     validate_context(config)?;
     validate_sandbox(config)?;
@@ -130,6 +131,16 @@ fn validate_provider(config: &AppConfig) -> Result<()> {
     }
 
     Ok(())
+}
+
+fn validate_provider_default_exists(config: &AppConfig) -> Result<()> {
+    ensure(
+        config
+            .provider
+            .has_provider(&config.provider.default_provider),
+        "provider.default_provider",
+        "default_provider 蹇呴』鎸囧悜宸插畾涔夌殑 provider 鎴栧唴缃?preset",
+    )
 }
 
 fn validate_memory(config: &AppConfig) -> Result<()> {

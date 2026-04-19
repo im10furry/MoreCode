@@ -485,6 +485,12 @@ dependencies = [
 [[package]]
 name = "cli"
 version = "0.1.0"
+dependencies = [
+ "config",
+ "memory",
+ "serde_json",
+ "tokio",
+]
 
 [[package]]
 name = "communication"
@@ -2362,6 +2368,8 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
+ "tokio-util",
+ "toml",
 ]
 
 [[package]]
@@ -3697,10 +3705,12 @@ dependencies = [
  "globset",
  "once_cell",
  "regex",
+ "reqwest",
  "sandbox",
  "serde",
  "serde_json",
  "tempfile",
+ "thiserror 2.0.18",
  "tokio",
  "walkdir",
 ]

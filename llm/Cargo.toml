@@ -10,8 +10,8 @@ name = "mc_llm"
 [features]
 default = ["openai-compat"]
 openai-compat = ["dep:futures-util", "dep:reqwest"]
-anthropic = []
-google = []
+anthropic = ["dep:futures-util", "dep:reqwest"]
+google = ["dep:futures-util", "dep:reqwest"]
 mock = []
 
 [dependencies]

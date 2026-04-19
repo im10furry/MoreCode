@@ -9,3 +9,12 @@ rust-version.workspace = true
 [[bin]]
 name = "cli"
 path = "src/main.rs"
+
+[lib]
+name = "mc_cli"
+path = "src/lib.rs"
+
+[dependencies]
+chrono.workspace = true
+mc-config = { package = "config", path = "../config" }
+mc-daemon = { package = "daemon", path = "../daemon" }

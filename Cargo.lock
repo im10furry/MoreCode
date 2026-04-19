@@ -485,6 +485,11 @@ dependencies = [
 [[package]]
 name = "cli"
 version = "0.1.0"
+dependencies = [
+ "chrono",
+ "config",
+ "daemon",
+]
 
 [[package]]
 name = "communication"
@@ -720,6 +725,15 @@ dependencies = [
 [[package]]
 name = "daemon"
 version = "0.1.0"
+dependencies = [
+ "chrono",
+ "config",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "uuid",
+]
 
 [[package]]
 name = "darling"

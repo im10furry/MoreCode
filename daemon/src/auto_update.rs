@@ -37,6 +37,9 @@ mod tests {
             },
         );
         assert_eq!(check.current_version, "0.1.0");
-        assert!(matches!(check.status, AutoUpdateStatus::UpdateAvailable { .. }));
+        assert!(matches!(
+            check.status,
+            AutoUpdateStatus::UpdateAvailable { .. }
+        ));
     }
 }

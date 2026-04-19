@@ -42,7 +42,10 @@ impl WasmSandbox {
         Ok(Self { limits })
     }
 
-    pub fn create_restricted_wasi(&self, allowed_dirs: &[PathBuf]) -> Result<WasiAccessPlan, SandboxError> {
+    pub fn create_restricted_wasi(
+        &self,
+        allowed_dirs: &[PathBuf],
+    ) -> Result<WasiAccessPlan, SandboxError> {
         if allowed_dirs.iter().any(|path| !path.exists()) {
             return Err(SandboxError::UnsupportedPlatform(
                 "all WASI preopened directories must exist".into(),
@@ -85,7 +88,9 @@ mod tests {
     #[test]
     fn wasm_module_validation_checks_magic_header() {
         let sandbox = WasmSandbox::new(WasmSandboxLimits::default()).unwrap();
-        assert!(sandbox.validate_wasm_module(b"\0asm\x01\x00\x00\x00").is_ok());
+        assert!(sandbox
+            .validate_wasm_module(b"\0asm\x01\x00\x00\x00")
+            .is_ok());
         assert!(sandbox.validate_wasm_module(b"not-wasm").is_err());
     }
 

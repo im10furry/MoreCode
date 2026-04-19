@@ -25,10 +25,16 @@ impl DaemonHealth {
     pub fn new(components: Vec<ComponentHealth>) -> Self {
         let state = components
             .iter()
-            .fold(HealthState::Healthy, |acc, component| match (acc, component.state) {
-                (HealthState::Unhealthy, _) | (_, HealthState::Unhealthy) => HealthState::Unhealthy,
-                (HealthState::Degraded, _) | (_, HealthState::Degraded) => HealthState::Degraded,
-                _ => HealthState::Healthy,
+            .fold(HealthState::Healthy, |acc, component| {
+                match (acc, component.state) {
+                    (HealthState::Unhealthy, _) | (_, HealthState::Unhealthy) => {
+                        HealthState::Unhealthy
+                    }
+                    (HealthState::Degraded, _) | (_, HealthState::Degraded) => {
+                        HealthState::Degraded
+                    }
+                    _ => HealthState::Healthy,
+                }
             });
 
         Self {

@@ -6,6 +6,7 @@ use mc_memory::MemorySystem;
 use crate::cli::Cli;
 
 pub struct AppContext {
+    pub cwd: PathBuf,
     pub project_root: PathBuf,
     pub config: AppConfig,
     pub memory: MemorySystem,
@@ -17,6 +18,7 @@ impl AppContext {
             Some(path) => path.clone(),
             None => std::env::current_dir().map_err(|error| error.to_string())?,
         };
+        let cwd = project_root.clone();
 
         let config_loader =
             ConfigLoader::with_default_paths().map_err(|error| error.to_string())?;
@@ -29,6 +31,7 @@ impl AppContext {
             .map_err(|error| error.to_string())?;
 
         Ok(Self {
+            cwd,
             project_root,
             config,
             memory,

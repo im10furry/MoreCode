@@ -11,6 +11,7 @@ name = "cli"
 path = "src/main.rs"
 
 [dependencies]
+chrono.workspace = true
 mc-config.workspace = true
 mc-daemon = { package = "daemon", path = "../daemon" }
 mc-memory.workspace = true

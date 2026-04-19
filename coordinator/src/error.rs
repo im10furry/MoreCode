@@ -24,6 +24,8 @@ pub enum CoordinatorError {
     DaemonContextUnavailable,
     #[error("background task join failed: {0}")]
     Join(String),
+    #[error("internal coordinator error: {0}")]
+    Internal(String),
     #[error(transparent)]
     Agent(#[from] AgentError),
     #[error(transparent)]

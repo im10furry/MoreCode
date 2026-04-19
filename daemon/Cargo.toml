@@ -9,3 +9,14 @@ rust-version.workspace = true
 [lib]
 name = "mc_daemon"
 path = "src/lib.rs"
+
+[dependencies]
+chrono.workspace = true
+mc-config = { package = "config", path = "../config" }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

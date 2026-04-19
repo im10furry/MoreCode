@@ -370,6 +370,37 @@ impl ConfigLoader {
                 "MORECODE_DAEMON_DAILY_BUDGET_USD" => {
                     config.daemon.daily_budget_usd = parse_optional_f64(&var_name, &raw_value)?
                 }
+                "MORECODE_DAEMON_TASKPILE_ENABLED" => {
+                    config.daemon.taskpile.enabled = parse_bool(&var_name, &raw_value)?
+                }
+                "MORECODE_DAEMON_TASKPILE_STORAGE_DIR" => {
+                    config.daemon.taskpile.storage_dir = optional_string(raw_value)
+                }
+                "MORECODE_DAEMON_TASKPILE_MAX_RUNNING_TASKS" => {
+                    config.daemon.taskpile.max_running_tasks =
+                        parse_value(&var_name, &raw_value)?
+                }
+                "MORECODE_DAEMON_TASKPILE_DEDUP_WINDOW_SECS" => {
+                    config.daemon.taskpile.dedup_window_secs =
+                        parse_value(&var_name, &raw_value)?
+                }
+                "MORECODE_DAEMON_TASKPILE_DEFAULT_TOKEN_BUDGET" => {
+                    config.daemon.taskpile.default_token_budget =
+                        parse_value(&var_name, &raw_value)?
+                }
+                "MORECODE_DAEMON_TASKPILE_DEFAULT_ISOLATION_PROFILE" => {
+                    config.daemon.taskpile.default_isolation_profile =
+                        normalize_string(raw_value)
+                }
+                "MORECODE_DAEMON_TASKPILE_CLOUD_ENABLED" => {
+                    config.daemon.taskpile.cloud.enabled = parse_bool(&var_name, &raw_value)?
+                }
+                "MORECODE_DAEMON_TASKPILE_CLOUD_ENDPOINT" => {
+                    config.daemon.taskpile.cloud.endpoint = optional_string(raw_value)
+                }
+                "MORECODE_DAEMON_TASKPILE_CLOUD_PROJECT_ID" => {
+                    config.daemon.taskpile.cloud.project_id = optional_string(raw_value)
+                }
 
                 "MORECODE_TUI_THEME" => config.tui.theme = normalize_string(raw_value),
                 "MORECODE_TUI_MOUSE_SUPPORT" => {

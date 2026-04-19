@@ -11,8 +11,13 @@ use std::fs::OpenOptions;
 use crate::error::SandboxError;
 use crate::path_restriction::normalize_path_no_symlink_escape;
 
-pub use landlock::{apply_landlock, detect_landlock_support, LandlockConfig, LandlockStatus, LandlockSupport};
-pub use seccomp::{apply_seccomp, detect_seccomp_support, safe_profile, SeccompMode, SeccompProfile, SeccompSupport};
+pub use landlock::{
+    apply_landlock, detect_landlock_support, LandlockConfig, LandlockStatus, LandlockSupport,
+};
+pub use seccomp::{
+    apply_seccomp, detect_seccomp_support, safe_profile, SeccompMode, SeccompProfile,
+    SeccompSupport,
+};
 pub use wasm::{WasiAccessPlan, WasmSandbox, WasmSandboxLimits};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

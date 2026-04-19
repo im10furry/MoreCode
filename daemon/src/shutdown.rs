@@ -30,7 +30,10 @@ impl ShutdownCoordinator {
         self.token.cancel();
     }
 
-    pub async fn wait_for_shutdown(&self, timeout: Duration) -> Result<ShutdownOutcome, DaemonError> {
+    pub async fn wait_for_shutdown(
+        &self,
+        timeout: Duration,
+    ) -> Result<ShutdownOutcome, DaemonError> {
         if self.token.is_cancelled() {
             return Ok(ShutdownOutcome::Completed);
         }

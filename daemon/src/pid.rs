@@ -20,9 +20,11 @@ impl PidFileGuard {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        std::fs::write(&path, std::process::id().to_string()).map_err(|error| DaemonError::PidFile {
-            path: path.clone(),
-            reason: error.to_string(),
+        std::fs::write(&path, std::process::id().to_string()).map_err(|error| {
+            DaemonError::PidFile {
+                path: path.clone(),
+                reason: error.to_string(),
+            }
         })?;
 
         Ok(Self { path })
@@ -42,10 +44,13 @@ impl PidFileGuard {
             path: path.to_path_buf(),
             reason: error.to_string(),
         })?;
-        let pid = contents.trim().parse::<u32>().map_err(|error| DaemonError::PidFile {
-            path: path.to_path_buf(),
-            reason: error.to_string(),
-        })?;
+        let pid = contents
+            .trim()
+            .parse::<u32>()
+            .map_err(|error| DaemonError::PidFile {
+                path: path.to_path_buf(),
+                reason: error.to_string(),
+            })?;
         Ok(Some(pid))
     }
 }
@@ -68,7 +73,10 @@ mod tests {
         let path = temp.path().join("daemon.pid");
         {
             let guard = PidFileGuard::acquire(&path).unwrap();
-            assert_eq!(PidFileGuard::read_pid(&path).unwrap(), Some(std::process::id()));
+            assert_eq!(
+                PidFileGuard::read_pid(&path).unwrap(),
+                Some(std::process::id())
+            );
             assert_eq!(guard.path(), path.as_path());
         }
         assert!(!path.exists());

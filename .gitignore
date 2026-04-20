@@ -52,3 +52,4 @@ rustup.log
 /设计文档
 /需求文档
 *.ps1
+/temp/

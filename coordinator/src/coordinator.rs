@@ -4,12 +4,12 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use chrono::{DateTime, Utc};
-use mc_agent::{
-    AgentConfig, CognitivePipeline, Coder, Explorer, ImpactAnalyzer, Planner, Reviewer,
-    SharedResources, Tester,
-};
 use mc_agent::registry_min::AgentRegistry;
 use mc_agent::trait_def_min::{Agent, AgentResult, ReviewVerdict, TestReport};
+use mc_agent::{
+    AgentConfig, Coder, CognitivePipeline, Explorer, ImpactAnalyzer, Planner, Reviewer,
+    SharedResources, Tester,
+};
 use mc_context::{CodeConventions, ProjectContext, ProjectInfo, RiskArea, ScanMetadata, TechStack};
 use mc_core::{AgentType, ResultType, TaskDescription, TaskIntent, TaskResult};
 use mc_llm::{
@@ -31,6 +31,7 @@ use crate::intent::{
 use crate::phase::{
     AgentExecutionState, AgentRuntimeStatus, ExecutionError, ExecutionPhase, ExecutionStatus,
 };
+use crate::plan::allocate_agent_budgets;
 use crate::response::{CoordinatorResponse, ResponseType};
 use crate::routing::{
     select_agent_set, CalibrationRecord, ComplexityConfig, ComplexityEvaluation,
@@ -349,10 +350,7 @@ impl Coordinator {
         evaluation: &ComplexityEvaluation,
     ) -> Result<CoordinatorResponse, CoordinatorError> {
         let task = self.build_cognitive_task(request, intent);
-        let shared = SharedResources::new(
-            self.project_root.clone(),
-            Arc::clone(&self.llm_client),
-        );
+        let shared = SharedResources::new(self.project_root.clone(), Arc::clone(&self.llm_client));
         let pipeline = CognitivePipeline::new(
             Explorer::new(AgentConfig::for_agent_type(AgentType::Explorer)),
             ImpactAnalyzer::new(AgentConfig::for_agent_type(AgentType::ImpactAnalyzer)),
@@ -431,7 +429,10 @@ impl Coordinator {
             complexity: intent.estimated_complexity,
             affected_files: intent.target_files.clone(),
             requires_new_dependency: matches!(intent.task_type, crate::TaskType::Configuration),
-            involves_architecture_change: matches!(intent.estimated_complexity, mc_core::Complexity::Complex),
+            involves_architecture_change: matches!(
+                intent.estimated_complexity,
+                mc_core::Complexity::Complex
+            ),
             needs_external_research: intent.needs_research,
             requires_testing: matches!(
                 intent.task_type,
@@ -598,39 +599,7 @@ Source text:\n{raw}"
         agents: &[AgentType],
         route_level: &RouteLevel,
     ) -> HashMap<AgentType, u32> {
-        if agents.is_empty() {
-            return HashMap::new();
-        }
-
-        let total_budget = match route_level {
-            RouteLevel::Simple => self.config.max_token_budget / 4,
-            RouteLevel::Medium => self.config.max_token_budget / 2,
-            RouteLevel::Complex => self.config.max_token_budget,
-            RouteLevel::Research => self.config.max_token_budget * 3 / 4,
-        };
-
-        let total_weight = agents
-            .iter()
-            .map(|agent_type| match agent_type {
-                AgentType::Coder | AgentType::Research => 2u32,
-                _ => 1u32,
-            })
-            .sum::<u32>()
-            .max(1);
-
-        agents
-            .iter()
-            .map(|agent_type| {
-                let weight = match agent_type {
-                    AgentType::Coder | AgentType::Research => 2u32,
-                    _ => 1u32,
-                };
-                (
-                    *agent_type,
-                    (total_budget * weight / total_weight).max(1_000),
-                )
-            })
-            .collect()
+        allocate_agent_budgets(self.config.max_token_budget, agents, route_level)
     }
 
     async fn dispatch_tasks_streaming(
@@ -1351,7 +1320,10 @@ edition = "2021"
 
         assert_eq!(response.response_type, ResponseType::Completed);
         assert!(response.content.contains("Pipeline: cognitive"));
-        assert!(response.changed_files.iter().any(|path| path == "src/lib.rs"));
+        assert!(response
+            .changed_files
+            .iter()
+            .any(|path| path == "src/lib.rs"));
         assert_eq!(response.test_results.len(), 1);
     }
 

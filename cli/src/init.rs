@@ -1,18 +1,40 @@
-use std::env;
+use std::path::PathBuf;
 
-use mc_config::AppConfig;
+use mc_config::{AppConfig, ConfigLoader};
+use mc_memory::MemorySystem;
 
-#[derive(Debug, Clone)]
+use crate::cli::Cli;
+
 pub struct AppContext {
-    pub cwd: std::path::PathBuf,
+    pub cwd: PathBuf,
+    pub project_root: PathBuf,
     pub config: AppConfig,
+    pub memory: MemorySystem,
 }
 
-pub fn initialize() -> Result<AppContext, String> {
-    let cwd = env::current_dir()
-        .map_err(|error| format!("failed to resolve current directory: {error}"))?;
-    Ok(AppContext {
-        cwd,
-        config: AppConfig::default(),
-    })
+impl AppContext {
+    pub async fn initialize(cli: &Cli) -> Result<Self, String> {
+        let project_root = match &cli.project_root {
+            Some(path) => path.clone(),
+            None => std::env::current_dir().map_err(|error| error.to_string())?,
+        };
+        let cwd = project_root.clone();
+
+        let config_loader =
+            ConfigLoader::with_default_paths().map_err(|error| error.to_string())?;
+        let config = config_loader
+            .load()
+            .await
+            .map_err(|error| error.to_string())?;
+        let memory = MemorySystem::new(&project_root)
+            .await
+            .map_err(|error| error.to_string())?;
+
+        Ok(Self {
+            cwd,
+            project_root,
+            config,
+            memory,
+        })
+    }
 }

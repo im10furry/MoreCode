@@ -489,6 +489,9 @@ dependencies = [
  "chrono",
  "config",
  "daemon",
+ "memory",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]
@@ -732,6 +735,8 @@ dependencies = [
  "serde_json",
  "tempfile",
  "thiserror 2.0.18",
+ "tokio",
+ "tokio-util",
  "uuid",
 ]
 
@@ -2376,6 +2381,8 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
+ "tokio-util",
+ "toml",
 ]
 
 [[package]]
@@ -3711,10 +3718,12 @@ dependencies = [
  "globset",
  "once_cell",
  "regex",
+ "reqwest",
  "sandbox",
  "serde",
  "serde_json",
  "tempfile",
+ "thiserror 2.0.18",
  "tokio",
  "walkdir",
 ]
@@ -3805,6 +3814,10 @@ checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
 [[package]]
 name = "tui"
 version = "0.1.0"
+dependencies = [
+ "core",
+ "thiserror 2.0.18",
+]
 
 [[package]]
 name = "typenum"

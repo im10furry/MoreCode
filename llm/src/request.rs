@@ -63,7 +63,7 @@ impl ChatRequest {
     pub fn estimated_prompt_tokens(&self) -> usize {
         self.messages
             .iter()
-            .map(|message| crate::estimate_text_tokens(&message.content.to_text()))
+            .map(crate::estimate_message_tokens)
             .sum()
     }
 }

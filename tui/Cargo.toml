@@ -9,3 +9,7 @@ rust-version.workspace = true
 [lib]
 name = "mc_tui"
 path = "src/lib.rs"
+
+[dependencies]
+mc-core.workspace = true
+thiserror.workspace = true

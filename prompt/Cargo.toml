@@ -18,6 +18,8 @@ seahash.workspace = true
 serde.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
+toml.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
+tokio-util.workspace = true

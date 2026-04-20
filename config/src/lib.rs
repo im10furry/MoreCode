@@ -25,7 +25,10 @@ pub use daemon::{
 pub use error::{ConfigError, Result};
 pub use loader::{ConfigChangeEvent, ConfigLoader, FileChangeType};
 pub use memory::{MemoryConfig, PartialMemoryConfig};
-pub use provider::{PartialProviderConfig, PartialProviderEntry, ProviderConfig, ProviderEntry};
+pub use provider::{
+    BuiltinProviderPreset, PartialProviderConfig, PartialProviderEntry, ProviderConfig,
+    ProviderEntry, ResolvedProviderEntry,
+};
 pub use recursive::{PartialRecursiveConfig, RecursiveConfig};
 pub use sandbox::{PartialSandboxConfig, SandboxConfig};
 pub use tui::{PartialTuiConfig, TuiConfig};

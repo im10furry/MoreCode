@@ -1,2 +1,5 @@
-pub mod config;
-pub mod provider;
+mod config;
+mod provider;
+
+pub use config::GoogleProviderConfig;
+pub use provider::GoogleProvider;

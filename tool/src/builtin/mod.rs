@@ -1,9 +1,11 @@
+mod browser;
 mod file_read;
 mod file_write;
 mod git;
 mod search;
 mod terminal;
 
+pub use browser::BrowserTool;
 pub use file_read::FileReadTool;
 pub use file_write::FileWriteTool;
 pub use git::GitTool;

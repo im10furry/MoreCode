@@ -116,17 +116,17 @@ morecode-agent/
 ### Requirements
 
 - Rust stable (latest)
-- <!-- TODO: Specify minimum Rust version -->
+- Minimum Rust version: `1.88.0`
 
 ### Build
 
 ```bash
 # Clone the project
-git clone https://github.com/<!-- TODO: fill repo address -->/morecode-agent.git
-cd morecode-agent
+git clone https://github.com/im10furry/MoreCode.git
+cd MoreCode
 
 # Minimal build (no optional features)
-cargo build -p mc-cli --no-default-features
+cargo build -p cli --no-default-features
 
 # Full build (all providers and sandbox backends)
 cargo build --all-features
@@ -135,14 +135,14 @@ cargo build --all-features
 ### Basic Usage
 
 ```bash
-# Interactive run
-morecode
+# Run a request through the current CLI entry
+cargo run -p cli -- run "summarize the current project"
 
-# Daemon mode
-morecode daemon start
+# Check daemon status
+cargo run -p cli -- daemon status
 
 # Environment diagnostics
-morecode doctor
+cargo run -p cli -- doctor
 ```
 
 ### Feature Flags

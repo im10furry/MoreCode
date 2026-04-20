@@ -10,11 +10,10 @@ rust-version.workspace = true
 name = "cli"
 path = "src/main.rs"
 
-[lib]
-name = "mc_cli"
-path = "src/lib.rs"
-
 [dependencies]
 chrono.workspace = true
-mc-config = { package = "config", path = "../config" }
+mc-config.workspace = true
 mc-daemon = { package = "daemon", path = "../daemon" }
+mc-memory.workspace = true
+serde_json.workspace = true
+tokio.workspace = true

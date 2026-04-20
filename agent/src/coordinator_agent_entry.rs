@@ -1,28 +1,29 @@
 #![forbid(unsafe_code)]
 
+pub mod coder;
 mod config;
 mod context;
-pub mod coder;
 mod error;
 mod execution_report;
 pub mod explorer;
 mod handoff;
+pub mod handoff_min;
 pub mod impact_analyzer;
 pub mod pipeline;
 pub mod planner;
 pub mod registry_min;
 pub mod reviewer;
-pub mod trait_def_min;
 mod support;
 #[cfg(test)]
 mod test_support;
 pub mod tester;
 mod trait_def;
+pub mod trait_def_min;
 
-pub use config::{AgentConfig, ExplorerConfig, LlmConfig, PlannerConfig};
-pub use context::{AgentContext, SharedResources};
 pub use coder::codegen::{CodeChangeDraft, CodeChangeKind, CodeGenerationOutput};
 pub use coder::Coder;
+pub use config::{AgentConfig, ExplorerConfig, LlmConfig, PlannerConfig};
+pub use context::{AgentContext, SharedResources};
 pub use error::AgentError;
 pub use execution_report::{AgentExecutionMetrics, AgentExecutionReport};
 pub use explorer::Explorer;

@@ -50,4 +50,6 @@ pub enum TaskPileError {
     InvalidOption(String),
     #[error("invalid taskpile schedule: {0}")]
     InvalidSchedule(String),
+    #[error("database error: {0}")]
+    DbError(String),
 }

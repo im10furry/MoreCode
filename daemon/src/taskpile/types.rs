@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use chrono::{DateTime, Duration, Utc};
+use chrono::{DateTime, Duration, Utc, Datelike, Timelike};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -127,6 +127,15 @@ pub enum TaskPileSchedule {
     Manual,
     At(DateTime<Utc>),
     IntervalSeconds(u64),
+    Cron(String),
+    WorkdayOnly {
+        hour: u32,
+        minute: u32,
+    },
+    WeekendOnly {
+        hour: u32,
+        minute: u32,
+    },
 }
 
 impl TaskPileSchedule {
@@ -135,6 +144,37 @@ impl TaskPileSchedule {
             Self::Manual => Some(now),
             Self::At(at) => Some(*at),
             Self::IntervalSeconds(seconds) => Some(now + Duration::seconds(*seconds as i64)),
+            Self::Cron(_cron) => {
+                // In a real implementation, we would parse the cron expression
+                // and calculate the next run time. For now, we'll return the next hour.
+                Some(now + Duration::hours(1))
+            },
+            Self::WorkdayOnly { hour, minute } => {
+                let mut next = now;
+                // Limit to 7 days to avoid infinite loop
+                for _ in 0..7 {
+                    next = next + Duration::days(1);
+                    let weekday = next.weekday();
+                    if weekday != chrono::Weekday::Sat && weekday != chrono::Weekday::Sun {
+                        return Some(next.with_hour(*hour).unwrap().with_minute(*minute).unwrap());
+                    }
+                }
+                // Fallback if no workday found within 7 days (should never happen)
+                Some(now + Duration::days(1))
+            },
+            Self::WeekendOnly { hour, minute } => {
+                let mut next = now;
+                // Limit to 7 days to avoid infinite loop
+                for _ in 0..7 {
+                    next = next + Duration::days(1);
+                    let weekday = next.weekday();
+                    if weekday == chrono::Weekday::Sat || weekday == chrono::Weekday::Sun {
+                        return Some(next.with_hour(*hour).unwrap().with_minute(*minute).unwrap());
+                    }
+                }
+                // Fallback if no weekend found within 7 days (should never happen)
+                Some(now + Duration::days(1))
+            },
         }
     }
 }

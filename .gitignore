@@ -50,3 +50,5 @@ rustup.log
 
 # Other files
 /设计文档
+/需求文档
+*.ps1

@@ -125,22 +125,6 @@ tui/             终端界面
 cli/             CLI 入口
 ```
 
-## 路线图
-
-```text
-Phase 1:
-  LLM Provider -> Token 计数 -> 上下文压缩 -> 权限 -> 沙箱 -> 通信 -> AST
-
-Phase 2:
-  Prompt 缓存 -> 流式输出 -> 中断取消 -> Letta 记忆 -> Hook -> MCP -> 工具注册
-
-Phase 3:
-  Focus 压缩 -> AST Probe/LSP-MCP -> 遥测 -> 配置 -> 文件监听 -> Checkpoint
-
-Phase 4:
-  ACON 蒸馏 -> Mem0-G 检索 -> WASM 加载 -> MCP Server -> IDE 集成
-```
-
 ## License
 
 [GNU General Public License v3.0](LICENSE)

@@ -398,9 +398,11 @@ mod tests {
     fn add_claim_complete_roundtrip() {
         let temp = tempdir().expect("tempdir");
         let service = TaskPileService::new(TaskPileConfig::default(), PathBuf::from(temp.path()));
-        let mut request = NewTaskRequest::default();
-        request.instruction = "ship the release checklist".to_string();
-        request.priority = TaskPilePriority::High;
+        let request = NewTaskRequest {
+            instruction: "ship the release checklist".to_string(),
+            priority: TaskPilePriority::High,
+            ..NewTaskRequest::default()
+        };
         let created = service.add_task(request).expect("create task");
         assert_eq!(created.status, TaskPileStatus::Queued);
 
@@ -424,12 +426,16 @@ mod tests {
     fn duplicate_task_is_rejected_inside_window() {
         let temp = tempdir().expect("tempdir");
         let service = TaskPileService::new(TaskPileConfig::default(), PathBuf::from(temp.path()));
-        let mut first = NewTaskRequest::default();
-        first.instruction = "re-run flaky test suite".to_string();
+        let first = NewTaskRequest {
+            instruction: "re-run flaky test suite".to_string(),
+            ..NewTaskRequest::default()
+        };
         service.add_task(first).expect("create");
 
-        let mut duplicate = NewTaskRequest::default();
-        duplicate.instruction = "re-run flaky test suite".to_string();
+        let duplicate = NewTaskRequest {
+            instruction: "re-run flaky test suite".to_string(),
+            ..NewTaskRequest::default()
+        };
         let error = service.add_task(duplicate).expect_err("duplicate");
         assert!(format!("{error}").contains("task already exists"));
     }

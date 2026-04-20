@@ -6,10 +6,15 @@ use tempfile::tempdir;
 use crate::capability::{Capability, PermissionLevel};
 use crate::command::parse_command;
 use crate::guardian::{Guardian, GuardianConfig, GuardianDecision, GuardianMode};
-use crate::os_layer::{open_file_no_symlinks, SafeOpenOptions};
+use crate::os_layer::{open_file_no_symlinks, safe_profile, SafeOpenOptions, SeccompMode};
 use crate::path_restriction::PathRestriction;
 use crate::permission::{drop_cleanup_count, TaskPermissionManager};
 use crate::tool::{ShellExecTool, ToolCallArgs};
+
+#[cfg(target_os = "linux")]
+use crate::os_layer::{apply_landlock, detect_landlock_support, LandlockConfig, LandlockSupport};
+#[cfg(target_os = "linux")]
+use std::process::Command;
 
 #[test]
 fn parse_command_is_structured_and_rejects_shell_operators() {
@@ -137,6 +142,101 @@ fn shell_exec_tool_uses_regex_escape_for_command_patterns() {
         .expect("run command capability");
 
     assert_eq!(run_command, r"git\+unsafe\?");
+}
+
+#[test]
+fn guardian_exposes_configured_seccomp_profile() {
+    let guardian = Guardian::new(GuardianConfig {
+        seccomp_profile: Some(safe_profile()),
+        ..GuardianConfig::default()
+    });
+
+    let profile = guardian.seccomp_profile().expect("seccomp profile");
+    assert_eq!(profile.mode, SeccompMode::Balanced);
+    assert!(profile
+        .denied_syscalls
+        .iter()
+        .any(|syscall| syscall == "ptrace"));
+}
+
+#[tokio::test]
+async fn guardian_builds_landlock_config_from_restrictions() {
+    let temp = tempdir().expect("tempdir");
+    let workspace = temp.path().join("workspace");
+    let docs = temp.path().join("docs");
+    std::fs::create_dir_all(&workspace).expect("workspace");
+    std::fs::create_dir_all(&docs).expect("docs");
+    let guardian = Guardian::new(GuardianConfig {
+        path_restrictions: vec![PathRestriction::read_only(&docs)],
+        ..GuardianConfig::default()
+    });
+
+    let config = guardian
+        .landlock_config_for_workspace(&workspace)
+        .await
+        .expect("landlock config");
+
+    assert!(config
+        .read_write_dirs
+        .iter()
+        .any(|path| path.ends_with("workspace")));
+    assert!(config
+        .read_only_dirs
+        .iter()
+        .any(|path| path.ends_with("docs")));
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn landlock_child_process_enforces_workspace_boundaries() {
+    const CHILD_ENV: &str = "MC_SANDBOX_LANDLOCK_CHILD";
+    const WORKSPACE_ENV: &str = "MC_SANDBOX_LANDLOCK_WORKSPACE";
+    const INSIDE_ENV: &str = "MC_SANDBOX_LANDLOCK_INSIDE";
+    const OUTSIDE_ENV: &str = "MC_SANDBOX_LANDLOCK_OUTSIDE";
+    const TEST_NAME: &str = "tests::landlock_child_process_enforces_workspace_boundaries";
+
+    if std::env::var_os(CHILD_ENV).is_some() {
+        let workspace = std::env::var_os(WORKSPACE_ENV).expect("workspace path");
+        let inside_file = std::env::var_os(INSIDE_ENV).expect("inside file");
+        let outside_file = std::env::var_os(OUTSIDE_ENV).expect("outside file");
+
+        let config = LandlockConfig {
+            read_write_dirs: vec![workspace.into()],
+            read_only_dirs: Vec::new(),
+            denied_paths: Vec::new(),
+        };
+
+        apply_landlock(&config).expect("apply landlock");
+        std::fs::write(inside_file, "inside").expect("write inside workspace");
+
+        let outside_result = std::fs::write(outside_file, "outside");
+        assert!(outside_result.is_err(), "outside write should be denied");
+        return;
+    }
+
+    let LandlockSupport::Supported { .. } = detect_landlock_support() else {
+        return;
+    };
+
+    let workspace = tempdir().expect("workspace tempdir");
+    let outside = tempdir().expect("outside tempdir");
+    let inside_file = workspace.path().join("inside.txt");
+    let outside_file = outside.path().join("outside.txt");
+    std::fs::write(&inside_file, "before").expect("seed inside file");
+    std::fs::write(&outside_file, "before").expect("seed outside file");
+
+    let status = Command::new(std::env::current_exe().expect("current test binary"))
+        .arg("--exact")
+        .arg(TEST_NAME)
+        .arg("--nocapture")
+        .env(CHILD_ENV, "1")
+        .env(WORKSPACE_ENV, workspace.path())
+        .env(INSIDE_ENV, &inside_file)
+        .env(OUTSIDE_ENV, &outside_file)
+        .status()
+        .expect("spawn child test process");
+
+    assert!(status.success(), "child test should succeed");
 }
 
 #[cfg(unix)]

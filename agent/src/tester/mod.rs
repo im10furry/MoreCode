@@ -1,6 +1,6 @@
 pub mod framework;
 
-use std::path::PathBuf;
+use std::path::Path;
 use std::time::Duration;
 
 use async_trait::async_trait;
@@ -9,12 +9,10 @@ use serde::{Deserialize, Serialize};
 use tokio::process::Command;
 use tokio::time::timeout;
 
-use crate::{
-    Agent, AgentConfig, AgentContext, AgentError, AgentExecutionReport, SharedResources,
-};
+use crate::{Agent, AgentConfig, AgentContext, AgentError, AgentExecutionReport, SharedResources};
 
 use self::framework::{
-    detect_framework, derive_focus_filters, parse_test_output, FrameworkDetectionContext,
+    derive_focus_filters, detect_framework, parse_test_output, FrameworkDetectionContext,
     TestCommand, TestFramework, TestRunSummary,
 };
 
@@ -55,10 +53,8 @@ impl Tester {
     }
 
     fn focused_targets(ctx: &AgentContext) -> Vec<String> {
-        let mut targets = derive_focus_filters(
-            Self::resolve_plan(ctx).as_ref(),
-            Some(ctx.task.as_ref()),
-        );
+        let mut targets =
+            derive_focus_filters(Self::resolve_plan(ctx).as_ref(), Some(ctx.task.as_ref()));
 
         if targets.is_empty() {
             targets = ctx.task.affected_files.clone();
@@ -68,7 +64,7 @@ impl Tester {
         targets
     }
 
-    fn choose_framework(ctx: &AgentContext, project_root: &PathBuf) -> TestFramework {
+    fn choose_framework(ctx: &AgentContext, project_root: &Path) -> TestFramework {
         let hint = ctx.task.user_input.as_str();
         detect_framework(project_root, &FrameworkDetectionContext { hint })
     }
@@ -76,7 +72,7 @@ impl Tester {
     fn command_for_framework(
         framework: TestFramework,
         focused_targets: &[String],
-        project_root: &PathBuf,
+        project_root: &Path,
     ) -> TestCommand {
         framework.build_command(focused_targets, project_root)
     }
@@ -84,7 +80,7 @@ impl Tester {
     async fn execute_command(
         &self,
         command: &TestCommand,
-        project_root: &PathBuf,
+        project_root: &Path,
     ) -> Result<(std::process::Output, u64), AgentError> {
         let started = std::time::Instant::now();
         let mut process = Command::new(&command.program);
@@ -104,13 +100,19 @@ impl Tester {
 
         let output = result.map_err(|err| AgentError::ExecutionFailed {
             agent_type: AgentType::Tester,
-            message: format!("failed to execute test command `{}`: {err}", command.render()),
+            message: format!(
+                "failed to execute test command `{}`: {err}",
+                command.render()
+            ),
         })?;
 
         Ok((output, started.elapsed().as_millis() as u64))
     }
 
-    async fn execute_internal(&self, ctx: &AgentContext) -> Result<TesterExecutionReport, AgentError> {
+    async fn execute_internal(
+        &self,
+        ctx: &AgentContext,
+    ) -> Result<TesterExecutionReport, AgentError> {
         let project_root = ctx.project_root();
         let focused_targets = Self::focused_targets(ctx);
         let framework = Self::choose_framework(ctx, &project_root);

@@ -196,27 +196,23 @@ pub(crate) fn infer_target_files(
 }
 
 pub(crate) fn infer_change_kind(path: &str) -> CodeChangeKind {
-    let lower = path.to_lowercase();
-    if lower.ends_with("mod.rs") || lower.ends_with("lib.rs") || lower.ends_with("main.rs") {
-        CodeChangeKind::Modify
-    } else if lower.ends_with(".md") || lower.ends_with(".toml") || lower.ends_with(".json") {
-        CodeChangeKind::Modify
-    } else {
-        CodeChangeKind::Modify
-    }
+    let _ = path;
+    CodeChangeKind::Modify
 }
 
 fn default_validation_steps(files: &[String]) -> Vec<String> {
-    if files.iter().any(|path| path.ends_with(".rs") || path.ends_with("Cargo.toml")) {
+    if files
+        .iter()
+        .any(|path| path.ends_with(".rs") || path.ends_with("Cargo.toml"))
+    {
         return vec!["cargo test".to_string()];
     }
     if files.iter().any(|path| path.ends_with(".py")) {
         return vec!["pytest".to_string()];
     }
-    if files
-        .iter()
-        .any(|path| path.ends_with(".ts") || path.ends_with(".tsx") || path.ends_with("package.json"))
-    {
+    if files.iter().any(|path| {
+        path.ends_with(".ts") || path.ends_with(".tsx") || path.ends_with("package.json")
+    }) {
         return vec!["npm test".to_string()];
     }
     vec!["Run focused regression checks for the touched files".to_string()]

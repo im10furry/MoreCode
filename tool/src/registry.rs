@@ -112,6 +112,22 @@ impl ToolRegistry {
         result
     }
 
+    pub async fn list_tools_with_deferred(&self, layer: VisibilityLayer) -> Vec<Arc<dyn Tool>> {
+        let deferred_names = self
+            .deferred_factories
+            .read()
+            .await
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>();
+
+        for name in deferred_names {
+            let _ = self.get(&name).await;
+        }
+
+        self.list_tools(layer).await
+    }
+
     pub async fn tool_definitions(&self, layer: VisibilityLayer) -> Vec<ToolDefinition> {
         self.list_tools(layer)
             .await
@@ -176,6 +192,12 @@ fn build_tool_call_args(tool: &dyn Tool, params: &Value) -> ToolCallArgs {
         .get("path")
         .and_then(Value::as_str)
         .map(PathBuf::from)
+        .or_else(|| {
+            params
+                .get("module_path")
+                .and_then(Value::as_str)
+                .map(PathBuf::from)
+        })
         .or_else(|| params.get("cwd").and_then(Value::as_str).map(PathBuf::from));
 
     ToolCallArgs {

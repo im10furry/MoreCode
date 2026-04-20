@@ -53,10 +53,7 @@ impl Reviewer {
         Ok(ctx.handoff.get::<ExecutionPlan>().await)
     }
 
-    async fn resolve_impact(
-        &self,
-        ctx: &AgentContext,
-    ) -> Result<Option<ImpactReport>, AgentError> {
+    async fn resolve_impact(&self, ctx: &AgentContext) -> Result<Option<ImpactReport>, AgentError> {
         if let Some(report) = ctx.impact_report.as_deref().cloned() {
             return Ok(Some(report));
         }
@@ -225,7 +222,12 @@ impl Agent for Reviewer {
         let warnings = report
             .findings
             .iter()
-            .filter(|finding| matches!(finding.severity, ReviewSeverity::Blocker | ReviewSeverity::Warning))
+            .filter(|finding| {
+                matches!(
+                    finding.severity,
+                    ReviewSeverity::Blocker | ReviewSeverity::Warning
+                )
+            })
             .map(|finding| finding.title.clone())
             .collect::<Vec<_>>();
 

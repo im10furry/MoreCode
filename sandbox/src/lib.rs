@@ -1,3 +1,5 @@
+#![cfg_attr(not(target_os = "linux"), forbid(unsafe_code))]
+
 pub mod audit;
 pub mod capability;
 pub mod command;
@@ -20,8 +22,12 @@ pub use command::{
     parse_command, render_command, ParsedCommand,
 };
 pub use command_whitelist::{CommandRule, CommandWhitelist};
-pub use error::{CommandParseError, SandboxError};
+pub use error::{CommandParseError, SandboxError, WasmSandboxError};
 pub use guardian::{Guardian, GuardianConfig, GuardianDecision, GuardianMode};
+pub use os_layer::{
+    WasiAccessPlan, WasiDirectoryAccess, WasmExecutionRequest, WasmExecutionResult, WasmModule,
+    WasmSandbox, WasmSandboxLimits,
+};
 pub use path_restriction::{PathRestriction, PathRestrictionType};
 pub use permission::{PermissionCheckResult, TaskPermission, TaskPermissionManager};
 pub use tool::{ShellExecTool, ToolCallArgs};

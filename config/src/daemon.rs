@@ -66,7 +66,7 @@ impl Default for TaskPileConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct TaskPileCloudConfig {
     #[serde(default)]
     pub enabled: bool,
@@ -74,16 +74,6 @@ pub struct TaskPileCloudConfig {
     pub endpoint: Option<String>,
     #[serde(default)]
     pub project_id: Option<String>,
-}
-
-impl Default for TaskPileCloudConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            endpoint: None,
-            project_id: None,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

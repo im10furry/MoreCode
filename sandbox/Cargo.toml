@@ -7,6 +7,10 @@ license.workspace = true
 [lib]
 name = "mc_sandbox"
 
+[features]
+default = []
+wasm = ["dep:wasmtime", "dep:wasmtime-wasi"]
+
 [dependencies]
 chrono.workspace = true
 globset.workspace = true
@@ -16,9 +20,14 @@ serde_json.workspace = true
 shlex.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
+wasmtime = { workspace = true, optional = true }
+wasmtime-wasi = { workspace = true, optional = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
+libc.workspace = true
 nix = { version = "0.31.2", default-features = false, features = ["fs"] }
+seccompiler.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
+wat.workspace = true

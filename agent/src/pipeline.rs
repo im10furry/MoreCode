@@ -3,9 +3,9 @@ use std::sync::Arc;
 use mc_core::{ExecutionPlan, ProjectContext, TaskDescription};
 
 use crate::{
-    Agent, AgentError, AgentExecutionReport, AgentHandoff, CodeGenerationOutput, Coder,
-    Explorer, ImpactAnalyzer, ImpactReport, Planner, ReviewReport, Reviewer, SharedResources,
-    Tester, TesterExecutionReport,
+    Agent, AgentError, AgentExecutionReport, AgentHandoff, CodeGenerationOutput, Coder, Explorer,
+    ImpactAnalyzer, ImpactReport, Planner, ReviewReport, Reviewer, SharedResources, Tester,
+    TesterExecutionReport,
 };
 
 #[derive(Debug, Clone)]
@@ -152,11 +152,13 @@ impl CognitivePipeline {
             .with_impact_report(planning.impact_report.clone())
             .with_execution_plan(planning.execution_plan.clone());
         let reviewer_execution = reviewer.execute(&reviewer_ctx).await?;
-        let review_report = handoff.get::<ReviewReport>().await.ok_or_else(|| {
-            AgentError::MissingContextData {
-                data_type: "ReviewReport".to_string(),
-            }
-        })?;
+        let review_report =
+            handoff
+                .get::<ReviewReport>()
+                .await
+                .ok_or_else(|| AgentError::MissingContextData {
+                    data_type: "ReviewReport".to_string(),
+                })?;
 
         let tester_ctx = tester
             .build_context(task, Some(planning.project_context.clone()), shared)
@@ -165,14 +167,13 @@ impl CognitivePipeline {
             .with_impact_report(planning.impact_report.clone())
             .with_execution_plan(planning.execution_plan.clone());
         let tester_execution = tester.execute(&tester_ctx).await?;
-        let tester_report =
-            tester_ctx
-                .handoff
-                .get::<TesterExecutionReport>()
-                .await
-                .ok_or_else(|| AgentError::MissingContextData {
-                    data_type: "TesterExecutionReport".to_string(),
-                })?;
+        let tester_report = tester_ctx
+            .handoff
+            .get::<TesterExecutionReport>()
+            .await
+            .ok_or_else(|| AgentError::MissingContextData {
+                data_type: "TesterExecutionReport".to_string(),
+            })?;
 
         Ok(CognitiveExecutionResult {
             planning,
@@ -189,9 +190,12 @@ impl CognitivePipeline {
         let coder = self.coder.as_ref().ok_or_else(|| AgentError::Validation {
             message: "Coder is not configured on the cognitive pipeline".to_string(),
         })?;
-        let reviewer = self.reviewer.as_ref().ok_or_else(|| AgentError::Validation {
-            message: "Reviewer is not configured on the cognitive pipeline".to_string(),
-        })?;
+        let reviewer = self
+            .reviewer
+            .as_ref()
+            .ok_or_else(|| AgentError::Validation {
+                message: "Reviewer is not configured on the cognitive pipeline".to_string(),
+            })?;
         let tester = self.tester.as_ref().ok_or_else(|| AgentError::Validation {
             message: "Tester is not configured on the cognitive pipeline".to_string(),
         })?;
@@ -209,7 +213,9 @@ mod tests {
 
     use super::CognitivePipeline;
     use crate::test_support::{create_test_project, MockLlmProvider};
-    use crate::{AgentConfig, Coder, Explorer, ImpactAnalyzer, Planner, Reviewer, SharedResources, Tester};
+    use crate::{
+        AgentConfig, Coder, Explorer, ImpactAnalyzer, Planner, Reviewer, SharedResources, Tester,
+    };
 
     #[tokio::test]
     async fn pipeline_runs_end_to_end_with_json_schema_requests() {
@@ -350,7 +356,10 @@ mod tests {
         task.affected_files = vec!["core/src/lib.rs".to_string()];
         task.requires_testing = true;
 
-        let result = pipeline.execute_full(&task, &shared).await.expect("full pipeline");
+        let result = pipeline
+            .execute_full(&task, &shared)
+            .await
+            .expect("full pipeline");
         assert_eq!(result.coder_output.changes[0].path, "core/src/lib.rs");
         assert!(matches!(
             result.review_report.verdict,

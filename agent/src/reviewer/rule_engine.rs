@@ -25,7 +25,11 @@ pub enum ReviewVerdict {
 
 impl ReviewVerdict {
     pub fn max(left: Self, right: Self) -> Self {
-        if left >= right { left } else { right }
+        if left >= right {
+            left
+        } else {
+            right
+        }
     }
 }
 
@@ -113,8 +117,12 @@ impl ReviewRuleEngine {
                         findings.push(ReviewFinding {
                             severity: ReviewSeverity::Warning,
                             title: format!("missing acceptance checks for {}", change.path),
-                            detail: "The generated change draft does not include any acceptance checks.".to_string(),
-                            recommendation: "Add at least one focused verification step per changed file.".to_string(),
+                            detail:
+                                "The generated change draft does not include any acceptance checks."
+                                    .to_string(),
+                            recommendation:
+                                "Add at least one focused verification step per changed file."
+                                    .to_string(),
                         });
                     }
                 }
@@ -139,7 +147,8 @@ impl ReviewRuleEngine {
                     severity: ReviewSeverity::Warning,
                     title: "unwrap usage introduced in patch preview".to_string(),
                     detail: "Generated patch preview appears to introduce `unwrap()`.".to_string(),
-                    recommendation: "Prefer propagating errors with `?` or explicit handling.".to_string(),
+                    recommendation: "Prefer propagating errors with `?` or explicit handling."
+                        .to_string(),
                 });
             }
 
@@ -166,10 +175,12 @@ impl ReviewRuleEngine {
         }
 
         if self.rules.require_high_risk_notes
+            && input.impact_report.is_some_and(|impact| {
+                impact.overall_risk_level.score() >= mc_core::RiskLevel::High.score()
+            })
             && input
-                .impact_report
-                .is_some_and(|impact| impact.overall_risk_level.score() >= mc_core::RiskLevel::High.score())
-            && input.codegen.is_some_and(|codegen| codegen.risks.is_empty())
+                .codegen
+                .is_some_and(|codegen| codegen.risks.is_empty())
         {
             findings.push(ReviewFinding {
                 severity: ReviewSeverity::Suggestion,
@@ -185,9 +196,14 @@ impl ReviewRuleEngine {
                 .custom_rules
                 .iter()
                 .any(|rule| rule.to_lowercase().contains("cargo.toml"))
-                && reviewed_files.iter().any(|file| file.ends_with("Cargo.toml"))
+                && reviewed_files
+                    .iter()
+                    .any(|file| file.ends_with("Cargo.toml"))
                 && input.codegen.is_some_and(|codegen| {
-                    !codegen.validation_steps.iter().any(|step| step.contains("cargo"))
+                    !codegen
+                        .validation_steps
+                        .iter()
+                        .any(|step| step.contains("cargo"))
                 })
             {
                 findings.push(ReviewFinding {
@@ -199,9 +215,11 @@ impl ReviewRuleEngine {
             }
         }
 
-        let verdict = findings.iter().fold(ReviewVerdict::Approved, |acc, finding| {
-            ReviewVerdict::max(acc, verdict_for_severity(finding.severity))
-        });
+        let verdict = findings
+            .iter()
+            .fold(ReviewVerdict::Approved, |acc, finding| {
+                ReviewVerdict::max(acc, verdict_for_severity(finding.severity))
+            });
 
         ReviewReport {
             verdict,

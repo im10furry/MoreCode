@@ -15,10 +15,13 @@ pub use landlock::{
     apply_landlock, detect_landlock_support, LandlockConfig, LandlockStatus, LandlockSupport,
 };
 pub use seccomp::{
-    apply_seccomp, detect_seccomp_support, safe_profile, SeccompMode, SeccompProfile,
-    SeccompSupport,
+    apply_seccomp, detect_seccomp_support, safe_profile, strict_profile, SeccompMode,
+    SeccompProfile, SeccompStatus, SeccompSupport,
 };
-pub use wasm::{WasiAccessPlan, WasmSandbox, WasmSandboxLimits};
+pub use wasm::{
+    WasiAccessPlan, WasiDirectoryAccess, WasmExecutionRequest, WasmExecutionResult, WasmModule,
+    WasmSandbox, WasmSandboxLimits,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SafeOpenOptions {

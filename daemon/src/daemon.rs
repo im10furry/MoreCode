@@ -171,8 +171,10 @@ mod tests {
     #[tokio::test]
     async fn daemon_controller_transitions_and_cleans_pid() {
         let temp = tempdir().unwrap();
-        let mut config = mc_config::DaemonConfig::default();
-        config.pid_file = temp.path().join("daemon.pid").to_string_lossy().to_string();
+        let config = mc_config::DaemonConfig {
+            pid_file: temp.path().join("daemon.pid").to_string_lossy().to_string(),
+            ..mc_config::DaemonConfig::default()
+        };
         let controller = DaemonController::new(config.clone());
 
         controller.start().await.unwrap();

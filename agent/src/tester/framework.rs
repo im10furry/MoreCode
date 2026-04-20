@@ -123,7 +123,10 @@ impl TestFramework {
     }
 }
 
-pub fn detect_framework(project_root: &Path, context: &FrameworkDetectionContext<'_>) -> TestFramework {
+pub fn detect_framework(
+    project_root: &Path,
+    context: &FrameworkDetectionContext<'_>,
+) -> TestFramework {
     let hint = context.hint.to_lowercase();
     if hint.contains("pytest") || hint.contains("python test") {
         return TestFramework::Pytest;
@@ -162,7 +165,10 @@ pub fn derive_focus_filters(
     let mut focused = Vec::new();
     if let Some(plan) = execution_plan {
         for sub_task in &plan.sub_tasks {
-            if matches!(sub_task.assigned_agent, AgentType::Coder | AgentType::Tester) {
+            if matches!(
+                sub_task.assigned_agent,
+                AgentType::Coder | AgentType::Tester
+            ) {
                 focused.extend(sub_task.target_files.clone());
             }
         }
@@ -212,7 +218,13 @@ fn cargo_filter_from_path(path: &str) -> Option<String> {
     let stem = Path::new(path).file_stem()?.to_string_lossy();
     let filter = stem
         .chars()
-        .map(|ch| if ch.is_ascii_alphanumeric() || ch == '_' { ch } else { ' ' })
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || ch == '_' {
+                ch
+            } else {
+                ' '
+            }
+        })
         .collect::<String>()
         .split_whitespace()
         .next()
@@ -361,7 +373,8 @@ mod tests {
 
     #[test]
     fn parse_cargo_output_counts() {
-        let text = "test result: FAILED. 12 passed; 2 failed; 1 ignored; 0 measured; 0 filtered out";
+        let text =
+            "test result: FAILED. 12 passed; 2 failed; 1 ignored; 0 measured; 0 filtered out";
         let summary = parse_test_output(TestFramework::Cargo, text, "", Some(101), 900);
         assert_eq!(summary.passed, 12);
         assert_eq!(summary.failed, 2);

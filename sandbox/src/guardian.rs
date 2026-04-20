@@ -1,5 +1,5 @@
 use std::collections::HashSet;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -12,6 +12,11 @@ use crate::audit::{AuditEntry, AuditLogger};
 use crate::capability::{Capability, PermissionLevel};
 use crate::command::{check_destructive_patterns, parse_command};
 use crate::command_whitelist::CommandWhitelist;
+use crate::error::SandboxError;
+use crate::os_layer::{
+    apply_landlock, apply_seccomp, safe_profile, LandlockConfig, LandlockStatus, SeccompProfile,
+    SeccompStatus,
+};
 use crate::path_restriction::PathRestriction;
 use crate::permission::{PermissionCheckResult, TaskPermissionManager};
 use crate::tool::ToolCallArgs;
@@ -106,6 +111,8 @@ pub struct GuardianConfig {
     pub max_permission: Option<PermissionLevel>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub audit_log_path: Option<PathBuf>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub seccomp_profile: Option<SeccompProfile>,
 }
 
 impl Default for GuardianConfig {
@@ -117,6 +124,7 @@ impl Default for GuardianConfig {
             blocked_tools: HashSet::new(),
             max_permission: None,
             audit_log_path: None,
+            seccomp_profile: None,
         }
     }
 }
@@ -130,6 +138,7 @@ pub struct Guardian {
     task_permissions: Mutex<TaskPermissionManager>,
     audit_log: Arc<AuditLogger>,
     max_permission: Option<PermissionLevel>,
+    seccomp_profile: Option<SeccompProfile>,
     audit_enabled: bool,
 }
 
@@ -149,6 +158,7 @@ impl Guardian {
             task_permissions: Mutex::new(TaskPermissionManager::default()),
             audit_log: Arc::new(audit_log),
             max_permission: config.max_permission,
+            seccomp_profile: config.seccomp_profile,
             audit_enabled: true,
         }
     }
@@ -169,12 +179,40 @@ impl Guardian {
         Arc::clone(&self.audit_log)
     }
 
+    pub fn seccomp_profile(&self) -> Option<SeccompProfile> {
+        self.seccomp_profile.clone()
+    }
+
     pub async fn set_mode(&self, mode: GuardianMode) {
         *self.mode.write().await = mode;
     }
 
     pub async fn add_path_restriction(&self, restriction: PathRestriction) {
         self.path_restrictions.write().await.push(restriction);
+    }
+
+    pub async fn landlock_config_for_workspace(
+        &self,
+        task_workspace: &Path,
+    ) -> Result<LandlockConfig, SandboxError> {
+        let restrictions = self.path_restrictions.read().await.clone();
+        LandlockConfig::from_path_restrictions(task_workspace, &restrictions)
+    }
+
+    pub async fn apply_landlock_for_workspace(
+        &self,
+        task_workspace: &Path,
+    ) -> Result<LandlockStatus, SandboxError> {
+        let config = self.landlock_config_for_workspace(task_workspace).await?;
+        apply_landlock(&config)
+    }
+
+    pub fn seccomp_profile_for_command(&self) -> SeccompProfile {
+        self.seccomp_profile.clone().unwrap_or_else(safe_profile)
+    }
+
+    pub fn apply_seccomp_for_command(&self) -> Result<SeccompStatus, SandboxError> {
+        apply_seccomp(&self.seccomp_profile_for_command())
     }
 
     pub fn grant_task_permission(

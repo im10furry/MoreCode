@@ -116,7 +116,7 @@ impl BrowserTool {
             )
         } else {
             ToolResult::content_with_data(
-                format!("HTTP {status_code}\n{}", processed),
+                format!("HTTP {status_code}\n{processed}"),
                 json!({
                     "url": url,
                     "status": status_code,

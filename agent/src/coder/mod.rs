@@ -39,10 +39,7 @@ impl Coder {
         Ok(ctx.handoff.get::<ProjectContext>().await)
     }
 
-    async fn resolve_impact(
-        &self,
-        ctx: &AgentContext,
-    ) -> Result<Option<ImpactReport>, AgentError> {
+    async fn resolve_impact(&self, ctx: &AgentContext) -> Result<Option<ImpactReport>, AgentError> {
         if let Some(report) = ctx.impact_report.as_deref().cloned() {
             return Ok(Some(report));
         }
@@ -173,7 +170,10 @@ impl Agent for Coder {
         let mut report = AgentExecutionReport::success(
             AgentType::Coder,
             &ctx.execution_id,
-            format!("Coder prepared {} concrete change drafts", output.changes.len()),
+            format!(
+                "Coder prepared {} concrete change drafts",
+                output.changes.len()
+            ),
             result,
             ctx.elapsed_ms(),
             tokens,
@@ -267,7 +267,10 @@ mod tests {
         task.affected_files = vec!["core/src/lib.rs".to_string()];
         task.requires_testing = true;
 
-        let planning = pipeline.execute(&task, &shared).await.expect("planning pipeline");
+        let planning = pipeline
+            .execute(&task, &shared)
+            .await
+            .expect("planning pipeline");
 
         let handoff = Arc::new(AgentHandoff::new());
         let coder = Coder::new(AgentConfig::for_agent_type(AgentType::Coder));

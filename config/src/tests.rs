@@ -345,7 +345,9 @@ async fn missing_config_files_fall_back_to_defaults() {
     );
 
     let config = loader.load().await.unwrap();
-    assert_eq!(config, AppConfig::default());
+    let mut expected = AppConfig::default();
+    ConfigLoader::apply_env_overrides(&mut expected, std::env::vars()).unwrap();
+    assert_eq!(config, expected);
 }
 
 #[tokio::test]

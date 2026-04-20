@@ -31,6 +31,7 @@ pub enum PermissionScope {
     Search,
     Process,
     VersionControl,
+    External,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

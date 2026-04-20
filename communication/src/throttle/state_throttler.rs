@@ -8,7 +8,7 @@ use crate::StateMessage;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ThrottleOutcome {
-    Emit(StateMessage),
+    Emit(Box<StateMessage>),
     Deferred,
 }
 
@@ -54,7 +54,7 @@ impl StateThrottler {
                 if now.duration_since(entry.last_emitted_at) >= self.interval {
                     entry.last_emitted_at = now;
                     entry.message = message.clone();
-                    ThrottleOutcome::Emit(message)
+                    ThrottleOutcome::Emit(Box::new(message))
                 } else {
                     entry.message = message;
                     ThrottleOutcome::Deferred
@@ -62,7 +62,7 @@ impl StateThrottler {
             }
             None => {
                 clear_related_progress(&mut self.pending_progress, &message);
-                ThrottleOutcome::Emit(message)
+                ThrottleOutcome::Emit(Box::new(message))
             }
         }
     }
@@ -196,7 +196,7 @@ mod tests {
             token_used: 100,
         };
         let outcome = throttler.push_at(completed.clone(), now + Duration::from_millis(60));
-        assert_eq!(outcome, ThrottleOutcome::Emit(completed));
+        assert_eq!(outcome, ThrottleOutcome::Emit(Box::new(completed)));
 
         let flushed = throttler.flush_ready_at(now + Duration::from_millis(300));
         assert!(flushed.is_empty());

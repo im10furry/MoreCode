@@ -15,16 +15,39 @@ impl TreeNode {
 
 pub fn render_tree(nodes: &[TreeNode]) -> String {
     let mut lines = Vec::new();
-    for node in nodes {
-        render_node(node, 0, &mut lines);
+    for (index, node) in nodes.iter().enumerate() {
+        render_node(node, "", index + 1 == nodes.len(), &mut lines);
     }
     lines.join("\n")
 }
 
-fn render_node(node: &TreeNode, depth: usize, lines: &mut Vec<String>) {
-    lines.push(format!("{}{}", "  ".repeat(depth), node.label));
-    for child in &node.children {
-        render_node(child, depth + 1, lines);
+fn render_node(node: &TreeNode, prefix: &str, is_last: bool, lines: &mut Vec<String>) {
+    if prefix.is_empty() {
+        lines.push(node.label.clone());
+    } else {
+        let branch = if is_last { "`- " } else { "|- " };
+        lines.push(format!("{prefix}{branch}{}", node.label));
+    }
+
+    let child_prefix = if prefix.is_empty() {
+        String::new()
+    } else if is_last {
+        format!("{prefix}   ")
+    } else {
+        format!("{prefix}|  ")
+    };
+
+    for (index, child) in node.children.iter().enumerate() {
+        render_node(
+            child,
+            if prefix.is_empty() {
+                "  "
+            } else {
+                &child_prefix
+            },
+            index + 1 == node.children.len(),
+            lines,
+        );
     }
 }
 
@@ -39,6 +62,6 @@ mod tests {
             children: vec![TreeNode::leaf("main.rs")],
         }]);
         assert!(output.contains("src"));
-        assert!(output.contains("  main.rs"));
+        assert!(output.contains("`- main.rs") || output.contains("|- main.rs"));
     }
 }

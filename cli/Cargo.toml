@@ -12,8 +12,11 @@ path = "src/main.rs"
 
 [dependencies]
 chrono.workspace = true
+mc-communication.workspace = true
 mc-config.workspace = true
+mc-core.workspace = true
 mc-daemon = { package = "daemon", path = "../daemon" }
 mc-memory.workspace = true
+mc-tui.workspace = true
 serde_json.workspace = true
 tokio.workspace = true

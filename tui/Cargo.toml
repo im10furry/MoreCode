@@ -11,5 +11,12 @@ name = "mc_tui"
 path = "src/lib.rs"
 
 [dependencies]
+chrono.workspace = true
+crossterm = { workspace = true, features = ["event-stream"] }
+futures-util.workspace = true
+mc-communication.workspace = true
 mc-core.workspace = true
+ratatui.workspace = true
+serde_json.workspace = true
 thiserror.workspace = true
+tokio.workspace = true

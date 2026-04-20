@@ -135,12 +135,13 @@ where
 }
 
 fn parse_new_task(args: &[String], ctx: &AppContext) -> Result<NewTaskRequest, String> {
-    let mut request = NewTaskRequest::default();
-    request.token_budget = ctx.config.daemon.taskpile.default_token_budget;
-    request.isolation =
-        IsolationProfile::parse(&ctx.config.daemon.taskpile.default_isolation_profile);
-    request.cloud_endpoint = ctx.config.daemon.taskpile.cloud.endpoint.clone();
-    request.cloud_project_id = ctx.config.daemon.taskpile.cloud.project_id.clone();
+    let mut request = NewTaskRequest {
+        token_budget: ctx.config.daemon.taskpile.default_token_budget,
+        isolation: IsolationProfile::parse(&ctx.config.daemon.taskpile.default_isolation_profile),
+        cloud_endpoint: ctx.config.daemon.taskpile.cloud.endpoint.clone(),
+        cloud_project_id: ctx.config.daemon.taskpile.cloud.project_id.clone(),
+        ..NewTaskRequest::default()
+    };
 
     let mut instruction_parts = Vec::new();
     for token in args.iter().skip(1) {

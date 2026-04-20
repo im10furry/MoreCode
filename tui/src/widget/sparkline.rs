@@ -1,28 +1,27 @@
-const BARS: &[char] = &[' ', '.', ':', '-', '=', '+', '*', '#', '%', '@'];
-
-pub fn render_sparkline(values: &[u64]) -> String {
-    if values.is_empty() {
-        return String::new();
+pub fn compress_history(values: &[u64], width: usize) -> Vec<u64> {
+    if values.is_empty() || width == 0 {
+        return Vec::new();
     }
 
-    let max = values.iter().copied().max().unwrap_or(1).max(1);
+    if values.len() <= width {
+        return values.to_vec();
+    }
+
+    let chunk_size = values.len().div_ceil(width);
     values
-        .iter()
-        .map(|value| {
-            let idx = ((*value as f64 / max as f64) * (BARS.len() as f64 - 1.0)).round() as usize;
-            BARS[idx.min(BARS.len() - 1)]
-        })
+        .chunks(chunk_size)
+        .map(|chunk| chunk.iter().copied().max().unwrap_or(0))
         .collect()
 }
 
 #[cfg(test)]
 mod tests {
-    use super::render_sparkline;
+    use super::compress_history;
 
     #[test]
     fn sparkline_handles_empty_and_scaled_data() {
-        assert_eq!(render_sparkline(&[]), "");
-        let output = render_sparkline(&[0, 5, 10]);
-        assert_eq!(output.len(), 3);
+        assert!(compress_history(&[], 4).is_empty());
+        assert_eq!(compress_history(&[0, 5, 10], 4), vec![0, 5, 10]);
+        assert_eq!(compress_history(&[1, 3, 2, 4, 6, 5], 3), vec![3, 4, 6]);
     }
 }

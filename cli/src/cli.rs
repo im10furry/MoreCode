@@ -9,6 +9,7 @@ pub struct Cli {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Command {
     Run { request: String },
+    Tui,
     Memory(MemoryCommand),
     Config(ConfigCommand),
     Doctor,
@@ -85,6 +86,7 @@ fn parse_command(args: &[String]) -> Result<Command, CliError> {
             }
             Ok(Command::Run { request })
         }
+        [cmd] if cmd == "tui" => Ok(Command::Tui),
         [cmd] if cmd == "doctor" => Ok(Command::Doctor),
         [cmd, sub] if cmd == "memory" => Ok(Command::Memory(parse_memory_command(sub)?)),
         [cmd, sub] if cmd == "config" => Ok(Command::Config(parse_config_command(sub)?)),
@@ -121,6 +123,7 @@ fn usage() -> String {
     [
         "Usage:",
         "  cli [--project-root PATH] run <request>",
+        "  cli [--project-root PATH] tui",
         "  cli [--project-root PATH] memory <status|summary|refresh|clear>",
         "  cli config show",
         "  cli doctor",
@@ -166,6 +169,12 @@ mod tests {
                 request: "fix auth".into()
             }
         );
+    }
+
+    #[test]
+    fn parser_supports_tui_command() {
+        let cli = Cli::parse(["cli".to_string(), "tui".to_string()]).unwrap();
+        assert_eq!(cli.command, Command::Tui);
     }
 
     #[test]

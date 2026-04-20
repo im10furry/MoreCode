@@ -3,10 +3,10 @@ use serde_json::json;
 use std::sync::Arc;
 use tokio::time::{sleep, timeout, Duration};
 
-use crate::infra_context::{AgentContext, Logger};
-use crate::infra_error::AgentError;
-use crate::infra_execution_report::{AgentExecutionReport, ExecutionStatus};
-use crate::infra_trait_def::Agent;
+use crate::context::{AgentContext, Logger};
+use crate::error::AgentError;
+use crate::execution_report::{AgentExecutionReport, ExecutionStatus};
+use crate::trait_def::Agent;
 use crate::stream::StreamForwarder;
 
 pub type LifecycleHandler = Arc<dyn AgentLifecycle>;
@@ -49,8 +49,8 @@ pub async fn execute_with_context(
     ctx: &AgentContext,
     lifecycle: Option<LifecycleHandler>,
 ) -> Result<AgentExecutionReport, AgentError> {
-    let _ = ctx.event_bus.publish(crate::infra_context::AgentEvent {
-        kind: crate::infra_context::AgentEventKind::Started,
+    let _ = ctx.event_bus.publish(crate::context::AgentEvent {
+        kind: crate::context::AgentEventKind::Started,
         execution_id: ctx.execution_id,
         agent_type: agent.agent_type(),
         attempt: 1,
@@ -71,8 +71,8 @@ pub async fn execute_with_context(
 
     match &result {
         Ok(report) if report.status == ExecutionStatus::Cancelled => {
-            let _ = ctx.event_bus.publish(crate::infra_context::AgentEvent {
-                kind: crate::infra_context::AgentEventKind::Cancelled,
+            let _ = ctx.event_bus.publish(crate::context::AgentEvent {
+                kind: crate::context::AgentEventKind::Cancelled,
                 execution_id: ctx.execution_id,
                 agent_type: agent.agent_type(),
                 attempt: 0,
@@ -84,8 +84,8 @@ pub async fn execute_with_context(
             }
         }
         Ok(report) => {
-            let _ = ctx.event_bus.publish(crate::infra_context::AgentEvent {
-                kind: crate::infra_context::AgentEventKind::Completed,
+            let _ = ctx.event_bus.publish(crate::context::AgentEvent {
+                kind: crate::context::AgentEventKind::Completed,
                 execution_id: ctx.execution_id,
                 agent_type: agent.agent_type(),
                 attempt: 0,
@@ -97,8 +97,8 @@ pub async fn execute_with_context(
             }
         }
         Err(AgentError::ExecutionCancelled { .. }) => {
-            let _ = ctx.event_bus.publish(crate::infra_context::AgentEvent {
-                kind: crate::infra_context::AgentEventKind::Cancelled,
+            let _ = ctx.event_bus.publish(crate::context::AgentEvent {
+                kind: crate::context::AgentEventKind::Cancelled,
                 execution_id: ctx.execution_id,
                 agent_type: agent.agent_type(),
                 attempt: 0,
@@ -110,8 +110,8 @@ pub async fn execute_with_context(
             }
         }
         Err(error) => {
-            let _ = ctx.event_bus.publish(crate::infra_context::AgentEvent {
-                kind: crate::infra_context::AgentEventKind::Failed,
+            let _ = ctx.event_bus.publish(crate::context::AgentEvent {
+                kind: crate::context::AgentEventKind::Failed,
                 execution_id: ctx.execution_id,
                 agent_type: agent.agent_type(),
                 attempt: 0,
@@ -133,8 +133,8 @@ pub async fn execute_streaming_with_context(
     forwarder: &mut dyn StreamForwarder,
     lifecycle: Option<LifecycleHandler>,
 ) -> Result<AgentExecutionReport, AgentError> {
-    let _ = ctx.event_bus.publish(crate::infra_context::AgentEvent {
-        kind: crate::infra_context::AgentEventKind::Started,
+    let _ = ctx.event_bus.publish(crate::context::AgentEvent {
+        kind: crate::context::AgentEventKind::Started,
         execution_id: ctx.execution_id,
         agent_type: agent.agent_type(),
         attempt: 1,
@@ -175,8 +175,8 @@ pub async fn execute_streaming_with_context(
         match result {
             Ok(report) => {
                 forwarder.flush().await?;
-                let _ = ctx.event_bus.publish(crate::infra_context::AgentEvent {
-                    kind: crate::infra_context::AgentEventKind::Completed,
+                let _ = ctx.event_bus.publish(crate::context::AgentEvent {
+                    kind: crate::context::AgentEventKind::Completed,
                     execution_id: ctx.execution_id,
                     agent_type: agent.agent_type(),
                     attempt: 0,
@@ -189,8 +189,8 @@ pub async fn execute_streaming_with_context(
                 return Ok(report);
             }
             Err(error) if error.is_retryable() && attempt < ctx.max_retries => {
-                let _ = ctx.event_bus.publish(crate::infra_context::AgentEvent {
-                    kind: crate::infra_context::AgentEventKind::Retrying,
+                let _ = ctx.event_bus.publish(crate::context::AgentEvent {
+                    kind: crate::context::AgentEventKind::Retrying,
                     execution_id: ctx.execution_id,
                     agent_type: agent.agent_type(),
                     attempt: attempt + 1,
@@ -200,8 +200,8 @@ pub async fn execute_streaming_with_context(
                 sleep(Duration::from_millis(error.retry_delay_ms())).await;
             }
             Err(error) => {
-                let _ = ctx.event_bus.publish(crate::infra_context::AgentEvent {
-                    kind: crate::infra_context::AgentEventKind::Failed,
+                let _ = ctx.event_bus.publish(crate::context::AgentEvent {
+                    kind: crate::context::AgentEventKind::Failed,
                     execution_id: ctx.execution_id,
                     agent_type: agent.agent_type(),
                     attempt: 0,

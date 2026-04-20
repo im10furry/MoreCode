@@ -2,9 +2,9 @@ use mc_core::{AgentLayer, AgentType};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
-use crate::infra_context::SharedResources;
-use crate::infra_error::AgentError;
-use crate::infra_trait_def::{Agent, AgentCapabilities, AgentConfig};
+use crate::context::SharedResources;
+use crate::error::AgentError;
+use crate::trait_def::{Agent, AgentCapabilities, AgentConfig};
 
 pub type AgentFactory =
     Arc<dyn Fn(&SharedResources, &AgentConfig) -> Box<dyn Agent> + Send + Sync + 'static>;

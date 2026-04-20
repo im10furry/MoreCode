@@ -208,24 +208,6 @@ MoreCode Agent is designed for zero-intrusion extensibility—add new components
 
 ---
 
-## Roadmap
-
-```
-Phase 1 (MVP):
-  LLM Provider → Token counting → Context compression (L1+L4) → Permissions → Sandbox → Comms → AST (basic)
-
-Phase 2 (Enhance):
-  Prompt cache (5 layers) → Streaming output → Interrupt/cancel → Letta memory → Hook → MCP → Prompt templates → Tool registration
-
-Phase 3 (Innovate):
-  Context compression (Focus) → AST (Probe + LSP-MCP) → Telemetry → Config → File watching → Checkpoint
-
-Phase 4 (Frontier):
-  Context compression (ACON distillation) → Semantic retrieval (Mem0-G) → WASM loading → MCP Server → IDE integration
-```
-
----
-
 ## License
 
 [GNU General Public License v3.0](LICENSE)

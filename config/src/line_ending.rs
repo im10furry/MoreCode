@@ -121,7 +121,7 @@ fn default_max_file_size_kb() -> usize {
     2048
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct LineEndingFixMetadata {
     pub enabled: bool,
     pub applied: bool,
@@ -129,19 +129,6 @@ pub struct LineEndingFixMetadata {
     pub reason: Option<&'static str>,
     pub input: Option<EolStats>,
     pub target: Option<LineEnding>,
-}
-
-impl Default for LineEndingFixMetadata {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            applied: false,
-            skipped: false,
-            reason: None,
-            input: None,
-            target: None,
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

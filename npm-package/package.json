@@ -9,7 +9,8 @@
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "NPM_USAGE.md"
   ],
   "scripts": {
     "prepublishOnly": "npm run build",

@@ -32,21 +32,12 @@ cd MoreCode
 cargo build -p cli --release
 
 # 3. Run
-./target/release/cli --help
+./target/release/morecode --help
 ```
 
 ### Option 3: Use npm Package
 
-```bash
-# Install the npm package
-npm install -g @morecode/agent
-
-# Then install MoreCode via Cargo (recommended)
-cargo install morecode-agent --git https://github.com/im10furry/MoreCode.git
-
-# Now you can run
-morecode --help
-```
+For Node.js projects, see [NPM_USAGE.md](NPM_USAGE.md) for detailed instructions.
 
 ---
 

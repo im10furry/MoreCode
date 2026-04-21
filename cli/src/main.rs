@@ -25,6 +25,7 @@ async fn main() {
         Command::Config(config_command) => command::config::execute(&context, config_command).await,
         Command::Doctor => command::doctor::execute(&context).await,
         Command::Daemon(daemon_command) => command::daemon::execute(&context, daemon_command).await,
+        Command::OtherCli => command::othercli::execute(&context).await,
     };
 
     match result {

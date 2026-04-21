@@ -9,6 +9,8 @@ name = "mc_tool"
 
 [dependencies]
 globset.workspace = true
+mc-config.workspace = true
+mc-core.workspace = true
 mc-sandbox.workspace = true
 once_cell.workspace = true
 regex.workspace = true

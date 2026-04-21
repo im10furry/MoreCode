@@ -1,0 +1,52 @@
+{
+  "name": "morecode",
+  "version": "0.1.0",
+  "description": "MoreCode CLI packaged for npm and pnpm installation.",
+  "license": "MIT",
+  "bin": {
+    "morecode": "./bin/morecode.js"
+  },
+  "scripts": {
+    "postinstall": "node ./scripts/postinstall.js",
+    "build:native": "node ./scripts/postinstall.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    "agent",
+    "bin",
+    "cli",
+    "communication",
+    "config",
+    "context",
+    "coordinator",
+    "core",
+    "daemon",
+    "llm",
+    "mcp",
+    "memory",
+    "prompt",
+    "prompts",
+    "recursive",
+    "sandbox",
+    "scripts",
+    "tool",
+    "tui",
+    "Cargo.lock",
+    "Cargo.toml",
+    "LICENSE",
+    "README.md",
+    "README_zh.md",
+    "clippy.toml",
+    "rust-toolchain.toml",
+    "rustfmt.toml"
+  ],
+  "keywords": [
+    "cli",
+    "rust",
+    "ai",
+    "agent",
+    "morecode"
+  ]
+}

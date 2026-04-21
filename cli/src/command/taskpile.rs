@@ -16,7 +16,7 @@ pub fn execute(args: &[String], ctx: &AppContext) -> String {
         "list" => render_list(service.list_tasks()),
         "show" => {
             let Some(task_id) = args.get(1) else {
-                return "usage: mc-cli taskpile show <task_id>".to_string();
+                return "usage: morecode taskpile show <task_id>".to_string();
             };
             match service.get_task(task_id) {
                 Ok(task) => render_task(task),
@@ -44,7 +44,7 @@ pub fn execute(args: &[String], ctx: &AppContext) -> String {
         },
         "complete" => {
             let Some(task_id) = args.get(1) else {
-                return "usage: mc-cli taskpile complete <task_id> [summary...]".to_string();
+                return "usage: morecode taskpile complete <task_id> [summary...]".to_string();
             };
             let summary = if args.len() > 2 {
                 args[2..].join(" ")
@@ -58,7 +58,7 @@ pub fn execute(args: &[String], ctx: &AppContext) -> String {
         }
         "fail" => {
             let Some(task_id) = args.get(1) else {
-                return "usage: mc-cli taskpile fail <task_id> [reason...]".to_string();
+                return "usage: morecode taskpile fail <task_id> [reason...]".to_string();
             };
             let reason = if args.len() > 2 {
                 args[2..].join(" ")
@@ -102,7 +102,7 @@ pub fn execute(args: &[String], ctx: &AppContext) -> String {
         }
         "cloud-preview" => {
             let Some(task_id) = args.get(1) else {
-                return "usage: mc-cli taskpile cloud-preview <task_id>".to_string();
+                return "usage: morecode taskpile cloud-preview <task_id>".to_string();
             };
             match service.preview_cloud_payload(task_id) {
                 Ok(payload) => format!(
@@ -117,7 +117,7 @@ pub fn execute(args: &[String], ctx: &AppContext) -> String {
                 Err(error) => error.to_string(),
             }
         }
-        _ => "usage: mc-cli taskpile [list|add|show|claim|complete|fail|pause|resume|cancel|stats|cloud-status|cloud-preview]".to_string(),
+        _ => "usage: morecode taskpile [list|add|show|claim|complete|fail|pause|resume|cancel|stats|cloud-status|cloud-preview]".to_string(),
     }
 }
 
@@ -126,7 +126,7 @@ where
     F: FnOnce(&str) -> Result<TaskPileTask, mc_daemon::TaskPileError>,
 {
     let Some(task_id) = args.get(1) else {
-        return format!("usage: mc-cli taskpile {action} <task_id>");
+        return format!("usage: morecode taskpile {action} <task_id>");
     };
     match mutator(task_id) {
         Ok(task) => render_task(task),
@@ -152,7 +152,7 @@ fn parse_new_task(args: &[String], ctx: &AppContext) -> Result<NewTaskRequest, S
         }
     }
     if instruction_parts.is_empty() {
-        return Err("usage: mc-cli taskpile add <instruction...> [priority=high] [schedule=manual|at:2026-04-20T10:00:00Z|interval:300] [target=local|cloud] [isolation=workspace-write] [budget=12000] [compression=balanced] [parallelism=1] [approval=auto] [tags=a,b] [title=custom] [model=name]".to_string());
+        return Err("usage: morecode taskpile add <instruction...> [priority=high] [schedule=manual|at:2026-04-20T10:00:00Z|interval:300] [target=local|cloud] [isolation=workspace-write] [budget=12000] [compression=balanced] [parallelism=1] [approval=auto] [tags=a,b] [title=custom] [model=name]".to_string());
     }
     request.instruction = instruction_parts.join(" ");
     Ok(request)

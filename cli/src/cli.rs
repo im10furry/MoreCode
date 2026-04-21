@@ -14,6 +14,7 @@ pub enum Command {
     Config(ConfigCommand),
     Doctor,
     Daemon(DaemonCommand),
+    OtherCli,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -78,7 +79,7 @@ impl Cli {
 
 fn parse_command(args: &[String]) -> Result<Command, CliError> {
     match args {
-        [] => Err(CliError(usage())),
+        [] => Ok(Command::Tui),
         [cmd, rest @ ..] if cmd == "run" => {
             let request = rest.join(" ").trim().to_string();
             if request.is_empty() {
@@ -88,6 +89,7 @@ fn parse_command(args: &[String]) -> Result<Command, CliError> {
         }
         [cmd] if cmd == "tui" => Ok(Command::Tui),
         [cmd] if cmd == "doctor" => Ok(Command::Doctor),
+        [cmd] if cmd == "othercli" => Ok(Command::OtherCli),
         [cmd, sub] if cmd == "memory" => Ok(Command::Memory(parse_memory_command(sub)?)),
         [cmd, sub] if cmd == "config" => Ok(Command::Config(parse_config_command(sub)?)),
         [cmd, sub] if cmd == "daemon" => Ok(Command::Daemon(parse_daemon_command(sub)?)),
@@ -122,12 +124,13 @@ fn parse_daemon_command(sub: &str) -> Result<DaemonCommand, CliError> {
 fn usage() -> String {
     [
         "Usage:",
-        "  cli [--project-root PATH] run <request>",
-        "  cli [--project-root PATH] tui",
-        "  cli [--project-root PATH] memory <status|summary|refresh|clear>",
-        "  cli config show",
-        "  cli doctor",
-        "  cli daemon status",
+        "  morecode [--project-root PATH] run <request>",
+        "  morecode [--project-root PATH] tui",
+        "  morecode [--project-root PATH] memory <status|summary|refresh|clear>",
+        "  morecode config show",
+        "  morecode doctor",
+        "  morecode othercli",
+        "  morecode daemon status",
     ]
     .join("\n")
 }
@@ -141,7 +144,7 @@ mod tests {
     #[test]
     fn parser_handles_project_root_and_subcommands() {
         let cli = Cli::parse([
-            "cli".to_string(),
+            "morecode".to_string(),
             "--project-root".to_string(),
             "C:/repo".to_string(),
             "memory".to_string(),
@@ -156,7 +159,7 @@ mod tests {
     #[test]
     fn parser_collects_run_request() {
         let cli = Cli::parse([
-            "cli".to_string(),
+            "morecode".to_string(),
             "run".to_string(),
             "fix".to_string(),
             "auth".to_string(),
@@ -173,14 +176,20 @@ mod tests {
 
     #[test]
     fn parser_supports_tui_command() {
-        let cli = Cli::parse(["cli".to_string(), "tui".to_string()]).unwrap();
+        let cli = Cli::parse(["morecode".to_string(), "tui".to_string()]).unwrap();
+        assert_eq!(cli.command, Command::Tui);
+    }
+
+    #[test]
+    fn parser_defaults_to_tui_without_subcommand() {
+        let cli = Cli::parse(["morecode".to_string()]).unwrap();
         assert_eq!(cli.command, Command::Tui);
     }
 
     #[test]
     fn parser_rejects_unknown_commands() {
         let error = Cli::parse([
-            "cli".to_string(),
+            "morecode".to_string(),
             "config".to_string(),
             "unknown".to_string(),
         ])

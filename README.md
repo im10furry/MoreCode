@@ -125,6 +125,11 @@ morecode-agent/
 git clone https://github.com/im10furry/MoreCode.git
 cd MoreCode
 
+# Install as a local npm package and expose the `morecode` command
+npm install -g .
+# or
+pnpm add -g .
+
 # Minimal build (no optional features)
 cargo build -p cli --no-default-features
 
@@ -135,14 +140,14 @@ cargo build --all-features
 ### Basic Usage
 
 ```bash
-# Run a request through the current CLI entry
-cargo run -p cli -- run "summarize the current project"
+# Run a request through the installed CLI
+morecode run "summarize the current project"
 
 # Check daemon status
-cargo run -p cli -- daemon status
+morecode daemon status
 
 # Environment diagnostics
-cargo run -p cli -- doctor
+morecode doctor
 ```
 
 ### Feature Flags

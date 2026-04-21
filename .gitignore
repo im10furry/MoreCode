@@ -43,6 +43,8 @@ Thumbs.db
 *.out.log
 *.err.log
 rustup.log
+/bin/native/
+*.bak
 
 # Local build scratch directories
 /target-*/

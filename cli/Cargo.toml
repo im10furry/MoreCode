@@ -7,11 +7,12 @@ license.workspace = true
 rust-version.workspace = true
 
 [[bin]]
-name = "cli"
+name = "morecode"
 path = "src/main.rs"
 
 [dependencies]
 chrono.workspace = true
+dirs.workspace = true
 mc-communication.workspace = true
 mc-config.workspace = true
 mc-core.workspace = true
@@ -20,3 +21,4 @@ mc-memory.workspace = true
 mc-tui.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
+toml.workspace = true

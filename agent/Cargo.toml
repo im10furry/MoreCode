@@ -15,6 +15,7 @@ async-trait.workspace = true
 chrono.workspace = true
 ignore.workspace = true
 mc-context = { package = "context", path = "../context" }
+mc-config.workspace = true
 mc-core.workspace = true
 mc-llm.workspace = true
 regex.workspace = true

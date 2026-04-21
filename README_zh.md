@@ -39,6 +39,11 @@ cd MoreCode
 ### 构建
 
 ```bash
+# 以本地 npm 包方式安装，并暴露 `morecode` 命令
+npm install -g .
+# 或
+pnpm add -g .
+
 # 最小构建
 cargo build -p cli --no-default-features
 
@@ -49,17 +54,17 @@ cargo build --all-features
 ### 使用示例
 
 ```bash
-# 通过当前 CLI 入口运行请求
-cargo run -p cli -- run "summarize the current project"
+# 通过安装后的 CLI 运行请求
+morecode run "summarize the current project"
 
 # 查看 daemon 状态
-cargo run -p cli -- daemon status
+morecode daemon status
 
 # 环境诊断
-cargo run -p cli -- doctor
+morecode doctor
 
 # 查看项目记忆状态
-cargo run -p cli -- memory status
+morecode memory status
 ```
 
 ## 配置

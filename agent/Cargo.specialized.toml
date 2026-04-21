@@ -11,6 +11,7 @@ name = "mc_agent"
 path = "src/lib_specialized.rs"
 
 [dependencies]
+mc-config = { package = "config", path = "../config" }
 mc-core = { package = "core", path = "../core" }
 mc-tool = { package = "tool", path = "../tool" }
 async-trait = "0.1.89"

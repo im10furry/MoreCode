@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use mc_config::{auto_fix_line_endings_for_write, ConfigLoader};
 use mc_core::{AgentType, ProjectContext, TaskDescription};
 use regex::Regex;
 use serde_json::{json, Value};
@@ -144,6 +145,9 @@ impl DocWriter {
                 })?;
         }
 
+        let project_root = ctx.project_root();
+        let content =
+            auto_fix_line_endings_for_fallback(project_root.as_deref(), path, content).await;
         tokio::fs::write(path, content)
             .await
             .map_err(|error| AgentError::Io {
@@ -308,6 +312,32 @@ impl DocWriter {
         }
         dedupe_doc_types(resolved)
     }
+}
+
+async fn auto_fix_line_endings_for_fallback(
+    project_root: Option<&std::path::Path>,
+    path: &std::path::Path,
+    content: &str,
+) -> String {
+    let cfg = match project_root {
+        Some(project_root) => ConfigLoader::with_default_paths_for(project_root),
+        None => ConfigLoader::with_default_paths(),
+    };
+    let cfg = match cfg {
+        Ok(loader) => loader.load().await.ok().map(|c| c.line_ending),
+        Err(_) => None,
+    }
+    .unwrap_or_default();
+    let workspace_root = project_root
+        .map(std::path::Path::to_path_buf)
+        .or_else(|| std::env::current_dir().ok());
+    let Some(workspace_root) = workspace_root else {
+        return content.to_string();
+    };
+
+    auto_fix_line_endings_for_write(&workspace_root, path, content, &cfg)
+        .await
+        .content
 }
 
 #[async_trait]

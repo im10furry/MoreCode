@@ -11,6 +11,7 @@ name = "mc_config"
 path = "src/lib.rs"
 
 [dependencies]
+globset.workspace = true
 mc-core.workspace = true
 notify.workspace = true
 serde.workspace = true

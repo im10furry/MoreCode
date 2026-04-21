@@ -2,8 +2,38 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::ConfigError;
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum DaemonProfile {
+    Mvp,
+    Fast,
+    Medium,
+    Full,
+    FullExtensible,
+}
+
+impl std::str::FromStr for DaemonProfile {
+    type Err = String;
+
+    fn from_str(input: &str) -> Result<Self, Self::Err> {
+        let normalized = input.trim().to_ascii_lowercase().replace('_', "-");
+        match normalized.as_str() {
+            "mvp" => Ok(Self::Mvp),
+            "fast" => Ok(Self::Fast),
+            "medium" => Ok(Self::Medium),
+            "full" => Ok(Self::Full),
+            "full-extensible" | "full+extensible" | "full-ext" => Ok(Self::FullExtensible),
+            _ => Err(format!(
+                "未知 daemon profile: {input}（可选：mvp/fast/medium/full/full-extensible）"
+            )),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct DaemonConfig {
+    #[serde(default)]
+    pub profile: Option<DaemonProfile>,
     #[serde(default)]
     pub enabled: bool,
     #[serde(default = "default_pid_file")]
@@ -23,6 +53,7 @@ pub struct DaemonConfig {
 impl Default for DaemonConfig {
     fn default() -> Self {
         Self {
+            profile: None,
             enabled: false,
             pid_file: default_pid_file(),
             health_check_interval_secs: default_health_check_interval_secs(),
@@ -85,6 +116,7 @@ pub struct QuietHours {
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct PartialDaemonConfig {
+    pub profile: Option<DaemonProfile>,
     pub enabled: Option<bool>,
     pub pid_file: Option<String>,
     pub health_check_interval_secs: Option<u64>,
@@ -126,6 +158,10 @@ impl DaemonConfig {
         &mut self,
         partial: PartialDaemonConfig,
     ) -> Result<(), ConfigError> {
+        if let Some(profile) = partial.profile {
+            self.apply_profile(profile);
+            self.profile = Some(profile);
+        }
         if let Some(value) = partial.enabled {
             self.enabled = value;
         }
@@ -154,6 +190,56 @@ impl DaemonConfig {
         }
         Ok(())
     }
+
+    fn apply_profile(&mut self, profile: DaemonProfile) {
+        match profile {
+            DaemonProfile::Mvp => {
+                self.health_check_interval_secs = 60;
+                self.auto_update_check_hours = 24;
+                self.daily_budget_usd = Some(1.0);
+
+                self.taskpile.enabled = false;
+                self.taskpile.max_running_tasks = 1;
+                self.taskpile.default_token_budget = 6_000;
+            }
+            DaemonProfile::Fast => {
+                self.health_check_interval_secs = 30;
+                self.auto_update_check_hours = 24;
+                self.daily_budget_usd = Some(2.0);
+
+                self.taskpile.enabled = true;
+                self.taskpile.max_running_tasks = 1;
+                self.taskpile.default_token_budget = 8_000;
+            }
+            DaemonProfile::Medium => {
+                self.health_check_interval_secs = 30;
+                self.auto_update_check_hours = 12;
+                self.daily_budget_usd = Some(5.0);
+
+                self.taskpile.enabled = true;
+                self.taskpile.max_running_tasks = 2;
+                self.taskpile.default_token_budget = 12_000;
+            }
+            DaemonProfile::Full => {
+                self.health_check_interval_secs = 15;
+                self.auto_update_check_hours = 6;
+                self.daily_budget_usd = Some(10.0);
+
+                self.taskpile.enabled = true;
+                self.taskpile.max_running_tasks = 3;
+                self.taskpile.default_token_budget = 20_000;
+            }
+            DaemonProfile::FullExtensible => {
+                self.health_check_interval_secs = 15;
+                self.auto_update_check_hours = 6;
+                self.daily_budget_usd = Some(20.0);
+
+                self.taskpile.enabled = true;
+                self.taskpile.max_running_tasks = 4;
+                self.taskpile.default_token_budget = 25_000;
+            }
+        }
+    }
 }
 
 impl QuietHours {
@@ -170,6 +256,7 @@ impl QuietHours {
 impl PartialDaemonConfig {
     pub(crate) fn merge(self, other: Self) -> Self {
         Self {
+            profile: other.profile.or(self.profile),
             enabled: other.enabled.or(self.enabled),
             pid_file: other.pid_file.or(self.pid_file),
             health_check_interval_secs: other

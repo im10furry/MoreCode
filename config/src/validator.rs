@@ -13,6 +13,7 @@ pub fn validate(config: &AppConfig) -> Result<()> {
     validate_daemon(config)?;
     validate_tui(config)?;
     validate_cost(config)?;
+    validate_line_ending(config)?;
 
     if config.daemon.enabled
         && config
@@ -348,6 +349,15 @@ fn validate_cost(config: &AppConfig) -> Result<()> {
         "over_budget_action 必须是 warn/pause/block 之一",
     )?;
     require_non_empty("cost.cost_log_path", &config.cost.cost_log_path)?;
+    Ok(())
+}
+
+fn validate_line_ending(config: &AppConfig) -> Result<()> {
+    ensure(
+        config.line_ending.max_file_size_kb > 0,
+        "line_ending.max_file_size_kb",
+        "必须大于 0",
+    )?;
     Ok(())
 }
 

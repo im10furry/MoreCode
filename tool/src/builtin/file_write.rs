@@ -1,5 +1,6 @@
 use mc_sandbox::os_layer::{open_file_no_symlinks, SafeOpenOptions};
 use mc_sandbox::{Capability, CapabilityDeclaration, PermissionLevel};
+use mc_config::{auto_fix_line_endings_for_write, ConfigLoader};
 use serde_json::json;
 use tokio::io::AsyncWriteExt;
 
@@ -19,6 +20,9 @@ impl FileWriteTool {
             Ok(root) => root,
             Err(error) => return ToolResult::error(format!("无法获取工作目录: {error}")),
         };
+
+        let (content, line_ending_data) =
+            auto_fix_line_endings(&workspace_root, &path, content).await;
 
         if create_dirs {
             if let Some(parent) = path.parent() {
@@ -48,10 +52,41 @@ impl FileWriteTool {
                 "path": path.to_string_lossy(),
                 "bytes_written": content.len(),
                 "lines_written": content.lines().count(),
+                "line_ending": line_ending_data,
             }),
         )
         .with_duration(start.elapsed())
     }
+}
+
+async fn auto_fix_line_endings(
+    workspace_root: &std::path::Path,
+    path: &std::path::Path,
+    content: &str,
+) -> (String, serde_json::Value) {
+    let cfg = match ConfigLoader::with_default_paths_for(workspace_root) {
+        Ok(loader) => loader.load().await.ok().map(|c| c.line_ending),
+        Err(_) => None,
+    }
+    .unwrap_or_default();
+    let outcome = auto_fix_line_endings_for_write(workspace_root, path, content, &cfg).await;
+    let mut data = serde_json::json!({
+        "enabled": outcome.metadata.enabled,
+        "applied": outcome.metadata.applied,
+        "skipped": outcome.metadata.skipped,
+        "reason": outcome.metadata.reason,
+    });
+    if let Some(stats) = outcome.metadata.input {
+        data["input"] = serde_json::json!({
+            "lf": stats.lf_count,
+            "crlf": stats.crlf_count,
+            "mixed": stats.mixed,
+        });
+    }
+    if let Some(target) = outcome.metadata.target {
+        data["target"] = serde_json::Value::String(target.as_str().to_string());
+    }
+    (outcome.content, data)
 }
 
 impl Default for FileWriteTool {

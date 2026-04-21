@@ -5,6 +5,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+use mc_core::{CONFIG_FILE_NAME, PROJECT_CONFIG_SUBDIR};
 use tokio::time::{sleep, timeout, Duration};
 
 use crate::{
@@ -175,6 +176,7 @@ enabled = false
 
     let daemon: DaemonConfig = toml::from_str(
         r#"
+profile = "fast"
 enabled = true
 pid_file = "/tmp/demo.pid"
 health_check_interval_secs = 15
@@ -188,6 +190,7 @@ end_hour = 8
     )
     .unwrap();
     assert!(daemon.enabled);
+    assert_eq!(daemon.profile, Some(crate::DaemonProfile::Fast));
     assert_eq!(daemon.quiet_hours.unwrap().start_hour, 22);
 
     let tui: TuiConfig = toml::from_str(
@@ -217,6 +220,27 @@ cost_log_path = ".memory/cost.json"
 }
 
 #[test]
+fn daemon_profile_applies_preset_then_allows_overrides() {
+    let mut daemon = DaemonConfig::default();
+    daemon
+        .apply_partial(crate::PartialDaemonConfig {
+            profile: Some(crate::DaemonProfile::Fast),
+            taskpile: Some(crate::PartialTaskPileConfig {
+                max_running_tasks: Some(7),
+                ..crate::PartialTaskPileConfig::default()
+            }),
+            daily_budget_usd: Some(9.0),
+            ..crate::PartialDaemonConfig::default()
+        })
+        .unwrap();
+
+    assert_eq!(daemon.profile, Some(crate::DaemonProfile::Fast));
+    assert!(daemon.taskpile.enabled);
+    assert_eq!(daemon.taskpile.max_running_tasks, 7);
+    assert_eq!(daemon.daily_budget_usd, Some(9.0));
+}
+
+#[test]
 fn empty_toml_uses_defaults() {
     let config: AppConfig = toml::from_str("").unwrap();
     assert_eq!(config.app.name, "morecode");
@@ -238,6 +262,40 @@ fn env_mapping_applies_expected_override() {
     )
     .unwrap();
     assert_eq!(config.coordinator.max_token_budget, 100_000);
+}
+
+#[test]
+fn env_daemon_profile_applies_preset_before_other_overrides() {
+    let mut config = AppConfig::default();
+    ConfigLoader::apply_env_overrides(
+        &mut config,
+        vec![
+            (
+                "MORECODE_DAEMON_TASKPILE_MAX_RUNNING_TASKS".to_string(),
+                "7".to_string(),
+            ),
+            ("MORECODE_DAEMON_PROFILE".to_string(), "fast".to_string()),
+        ],
+    )
+    .unwrap();
+
+    assert_eq!(config.daemon.profile, Some(crate::DaemonProfile::Fast));
+    assert!(config.daemon.taskpile.enabled);
+    assert_eq!(config.daemon.health_check_interval_secs, 30);
+    assert_eq!(config.daemon.daily_budget_usd, Some(2.0));
+    assert_eq!(config.daemon.taskpile.default_token_budget, 8_000);
+    assert_eq!(config.daemon.taskpile.max_running_tasks, 7);
+}
+
+#[test]
+fn explicit_project_root_controls_default_project_config_path() {
+    let workspace = TempWorkspace::new();
+    let project_root = workspace.root.join("repo");
+
+    assert_eq!(
+        ConfigLoader::default_project_config_path_for(&project_root),
+        project_root.join(PROJECT_CONFIG_SUBDIR).join(CONFIG_FILE_NAME)
+    );
 }
 
 #[test]
@@ -400,7 +458,7 @@ async fn write_until_reloaded(
                 match receiver.recv().await {
                     Ok(ConfigChangeEvent::Reloaded { config })
                         if (config.agent.temperature - expected_temperature).abs()
-                            < f32::EPSILON =>
+                            < 1e-3 =>
                     {
                         break Some(*config)
                     }

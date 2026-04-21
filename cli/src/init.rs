@@ -21,7 +21,7 @@ impl AppContext {
         let cwd = project_root.clone();
 
         let config_loader =
-            ConfigLoader::with_default_paths().map_err(|error| error.to_string())?;
+            ConfigLoader::with_default_paths_for(&project_root).map_err(|error| error.to_string())?;
         let config = config_loader
             .load()
             .await

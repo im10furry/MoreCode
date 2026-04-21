@@ -7,6 +7,7 @@ use crate::{
     cost::{CostBudgetConfig, PartialCostBudgetConfig},
     daemon::{DaemonConfig, PartialDaemonConfig},
     error::ConfigError,
+    line_ending::{LineEndingConfig, PartialLineEndingConfig},
     memory::{MemoryConfig, PartialMemoryConfig},
     provider::{PartialProviderConfig, ProviderConfig},
     recursive::{PartialRecursiveConfig, RecursiveConfig},
@@ -38,6 +39,8 @@ pub struct AppConfig {
     pub tui: TuiConfig,
     #[serde(default)]
     pub cost: CostBudgetConfig,
+    #[serde(default)]
+    pub line_ending: LineEndingConfig,
 }
 
 impl AppConfig {
@@ -81,6 +84,9 @@ impl AppConfig {
         if let Some(value) = partial.cost {
             self.cost.apply_partial(value);
         }
+        if let Some(value) = partial.line_ending {
+            self.line_ending.apply_partial(value);
+        }
         Ok(())
     }
 }
@@ -122,6 +128,7 @@ pub struct PartialAppConfig {
     pub daemon: Option<PartialDaemonConfig>,
     pub tui: Option<PartialTuiConfig>,
     pub cost: Option<PartialCostBudgetConfig>,
+    pub line_ending: Option<PartialLineEndingConfig>,
 }
 
 impl PartialAppConfig {
@@ -146,6 +153,11 @@ impl PartialAppConfig {
             daemon: merge_optional(self.daemon, other.daemon, PartialDaemonConfig::merge),
             tui: merge_optional(self.tui, other.tui, PartialTuiConfig::merge),
             cost: merge_optional(self.cost, other.cost, PartialCostBudgetConfig::merge),
+            line_ending: merge_optional(
+                self.line_ending,
+                other.line_ending,
+                PartialLineEndingConfig::merge,
+            ),
         }
     }
 }

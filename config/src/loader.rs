@@ -17,7 +17,9 @@ use tokio::{
     time::sleep,
 };
 
-use crate::{app::PartialAppConfig, validate, AppConfig, ConfigError, Result};
+use crate::{
+    app::PartialAppConfig, validate, AppConfig, ConfigError, PartialDaemonConfig, Result,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FileChangeType {
@@ -76,9 +78,17 @@ impl ConfigLoader {
     }
 
     pub fn with_default_paths() -> Result<Self> {
+        let project_root = env::current_dir().map_err(|error| ConfigError::LoadFailed {
+            path: ".".to_string(),
+            reason: error.to_string(),
+        })?;
+        Self::with_default_paths_for(project_root)
+    }
+
+    pub fn with_default_paths_for(project_root: impl AsRef<Path>) -> Result<Self> {
         Ok(Self::with_paths(
             Self::default_global_config_path()?,
-            Self::default_project_config_path()?,
+            Self::default_project_config_path_for(project_root),
         ))
     }
 
@@ -91,12 +101,17 @@ impl ConfigLoader {
     }
 
     pub fn default_project_config_path() -> Result<PathBuf> {
-        env::current_dir()
-            .map(|dir| dir.join(PROJECT_CONFIG_SUBDIR).join(CONFIG_FILE_NAME))
-            .map_err(|error| ConfigError::LoadFailed {
-                path: ".".to_string(),
-                reason: error.to_string(),
-            })
+        let project_root = env::current_dir().map_err(|error| ConfigError::LoadFailed {
+            path: ".".to_string(),
+            reason: error.to_string(),
+        })?;
+        Ok(Self::default_project_config_path_for(project_root))
+    }
+
+    pub fn default_project_config_path_for(project_root: impl AsRef<Path>) -> PathBuf {
+        absolutize_path(project_root.as_ref().to_path_buf())
+            .join(PROJECT_CONFIG_SUBDIR)
+            .join(CONFIG_FILE_NAME)
     }
 
     pub async fn load(&self) -> Result<AppConfig> {
@@ -205,8 +220,25 @@ impl ConfigLoader {
     where
         I: IntoIterator<Item = (String, String)>,
     {
+        let vars: Vec<(String, String)> = vars.into_iter().collect();
+
+        if let Some((var_name, raw_value)) = vars
+            .iter()
+            .find(|(var_name, _)| var_name == "MORECODE_DAEMON_PROFILE")
+        {
+            let profile = parse_value(var_name, raw_value)?;
+            config.daemon.apply_partial(PartialDaemonConfig {
+                profile: Some(profile),
+                ..PartialDaemonConfig::default()
+            })?;
+        }
+
         for (var_name, raw_value) in vars {
             if !var_name.starts_with(MORECODE_ENV_PREFIX) {
+                continue;
+            }
+
+            if var_name == "MORECODE_DAEMON_PROFILE" {
                 continue;
             }
 

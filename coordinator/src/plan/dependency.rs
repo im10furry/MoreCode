@@ -102,8 +102,7 @@ pub fn topological_layers(
                 for neighbor in neighbors {
                     let degree = indegree.get_mut(neighbor).ok_or_else(|| {
                         CoordinatorError::Internal(format!(
-                            "dependency graph missing node '{}'",
-                            neighbor
+                            "dependency graph missing node '{neighbor}'"
                         ))
                     })?;
                     *degree = degree.saturating_sub(1);

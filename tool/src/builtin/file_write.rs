@@ -1,6 +1,6 @@
+use mc_config::{auto_fix_line_endings_for_write, ConfigLoader};
 use mc_sandbox::os_layer::{open_file_no_symlinks, SafeOpenOptions};
 use mc_sandbox::{Capability, CapabilityDeclaration, PermissionLevel};
-use mc_config::{auto_fix_line_endings_for_write, ConfigLoader};
 use serde_json::json;
 use tokio::io::AsyncWriteExt;
 

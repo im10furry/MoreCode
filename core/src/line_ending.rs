@@ -41,7 +41,7 @@ pub fn is_probably_binary(bytes: &[u8]) -> bool {
     if bytes.is_empty() {
         return false;
     }
-    if bytes.iter().any(|b| *b == 0) {
+    if bytes.contains(&0) {
         return true;
     }
 

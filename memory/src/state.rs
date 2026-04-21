@@ -9,7 +9,7 @@ pub enum ProjectMemoryState {
         meta: MetaJson,
         stale_threshold_days: i64,
     },
-    Valid(ProjectMemorySnapshot),
+    Valid(Box<ProjectMemorySnapshot>),
 }
 
 impl ProjectMemoryState {
@@ -27,7 +27,7 @@ impl ProjectMemoryState {
 
     pub fn snapshot(&self) -> Option<&ProjectMemorySnapshot> {
         match self {
-            Self::Valid(snapshot) => Some(snapshot),
+            Self::Valid(snapshot) => Some(snapshot.as_ref()),
             Self::Empty | Self::Stale { .. } => None,
         }
     }
@@ -41,7 +41,7 @@ impl From<ProjectMemory> for ProjectMemoryState {
                 stale_threshold_days: meta.stale_threshold_days,
                 meta,
             },
-            ProjectMemory::Valid(snapshot) => Self::Valid(*snapshot),
+            ProjectMemory::Valid(snapshot) => Self::Valid(snapshot),
         }
     }
 }

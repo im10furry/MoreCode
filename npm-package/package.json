@@ -1,6 +1,6 @@
 {
   "name": "@morecode/agent",
-  "version": "0.1.0-alpha.1",
+  "version": "0.1.0-alpha.2",
   "description": "MoreCode Agent - A multi-agent orchestrated AI coding assistant",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -13,14 +13,15 @@
   ],
   "scripts": {
     "prepublishOnly": "npm run build",
-    "build": "tsc",
-    "postinstall": "node dist/postinstall-simple.js"
+    "build": "tsc"
   },
   "keywords": [
     "ai",
     "coding",
     "agent",
-    "morecode"
+    "morecode",
+    "multi-agent",
+    "rust"
   ],
   "author": "MoreCode Contributors",
   "license": "MIT",

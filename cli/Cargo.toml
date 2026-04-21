@@ -1,13 +1,18 @@
 [package]
-name = "cli"
-version.workspace = true
+name = "morecode-cli"
+version = "0.1.0-alpha.2"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
 rust-version.workspace = true
+description = "MoreCode Agent - A multi-agent orchestrated AI coding assistant"
+repository = "https://github.com/im10furry/MoreCode.git"
+keywords = ["ai", "coding", "agent", "morecode"]
+categories = ["command-line-utilities", "development-tools"]
+readme = "../README.md"
 
 [[bin]]
-name = "cli"
+name = "morecode"
 path = "src/main.rs"
 
 [dependencies]

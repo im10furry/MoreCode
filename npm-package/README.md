@@ -1,84 +1,88 @@
-# @morecode/agent
+# MoreCode Agent
 
-A multi-agent orchestrated AI coding assistant built with Rust + Ratatui.
+> A multi-agent orchestrated AI coding assistant built with Rust + Ratatui
 
-## ⚠️ Alpha Version Notice
+---
 
-This is an early alpha version. Pre-built binaries are not available yet. You need to build from source.
+## Quick Start
 
-## Installation
+### Option 1: Cargo Install (Recommended)
 
-### From Source (Recommended for Alpha)
+The simplest way to install MoreCode is using Cargo:
+
+```bash
+# 1. Install Rust (if not already installed)
+# Visit https://rustup.rs/
+
+# 2. Install MoreCode
+cargo install morecode-agent --git https://github.com/im10furry/MoreCode.git
+
+# 3. Run
+morecode --help
+```
+
+### Option 2: Build from Source
 
 ```bash
 # 1. Clone the repository
 git clone https://github.com/im10furry/MoreCode.git
 cd MoreCode
 
-# 2. Install Rust
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-
-# 3. Build
+# 2. Build
 cargo build -p cli --release
 
-# 4. Run
+# 3. Run
 ./target/release/cli --help
 ```
 
-### npm Installation (For Future Versions)
+### Option 3: Use npm Package
 
 ```bash
+# Install the npm package
 npm install -g @morecode/agent
+
+# Then install MoreCode via Cargo (recommended)
+cargo install morecode-agent --git https://github.com/im10furry/MoreCode.git
+
+# Now you can run
 morecode --help
 ```
 
-## Quick Start
-
-### Configure LLM Providers
-
-```bash
-# Create config directory
-mkdir -p ~/.morecode
-
-# Create providers config
-cat > ~/.morecode/providers.toml << EOF
-[providers.openai]
-model = "gpt-4o"
-api_key_env = "OPENAI_API_KEY"
-EOF
-
-# Set your API key
-export OPENAI_API_KEY="your-api-key"
-```
-
-### Basic Usage
-
-```bash
-# Run a coding task
-cargo run -p cli -- run "refactor the main function to be more readable"
-
-# Check daemon status
-cargo run -p cli -- daemon status
-
-# Run diagnostics
-cargo run -p cli -- doctor
-```
+---
 
 ## Features
 
-- **Multi-agent orchestration**: 10 specialized agents collaborate by role
-- **Recursive orchestration (Map-Filter-Reduce)**: Break down complex tasks
-- **Intelligent routing**: Four-level routing complexity
-- **Dual-layer security sandbox**: OS layer + WASM layer
-- **Four-level progressive context compression**
-- **Letta-style tiered memory system**
-- **Multi-LLM provider support**
-- **MCP protocol integration**
-- **Five-layer prompt cache**
-- **Ratatui terminal UI**
-- **Daemon mode**
+- **Multi-agent orchestration**: 10 specialized agents collaborate on coding tasks
+- **Recursive orchestration**: Break down complex tasks into parallel subtasks
+- **Intelligent routing**: Memory-aware routing, 80% of requests without LLM
+- **Dual-layer security sandbox**: OS layer (Landlock + Seccomp) + WASM layer
+- **Four-level progressive context compression**: Micro-compression → LLM summarization → Memory compression → Reactive truncation
+- **Letta-style tiered memory system**: Core/Working/Recall/Archival four-layer memory
+- **Multi-LLM provider support**: OpenAI, DeepSeek, Zhipu, Tongyi, Moonshot, Ollama, Anthropic, Google
+- **MCP protocol integration**: Stdio/HTTP/Unix Socket support
+- **Five-layer prompt cache**: Global/Org/Project/Session/Round caching
+- **Ratatui terminal UI**: Real-time agent status, token consumption, communication topology
+- **Daemon mode**: 24/7 autonomous operation with checkpoint recovery
 
-For full documentation, visit the [main repository](https://github.com/im10furry/MoreCode).
+---
+
+## Usage
+
+```bash
+# Show help
+morecode --help
+
+# Start the TUI
+morecode tui
+
+# Run a task
+morecode run "Your task description"
+
+# Check environment
+morecode doctor
+```
+
+---
 
 ## License
 

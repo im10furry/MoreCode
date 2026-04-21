@@ -48,17 +48,44 @@ function getBinaryPath() {
         return binPath;
     }
     // 尝试在 PATH 中查找
-    // 否则提示用户手动构建
+    const pathDirs = (process.env.PATH || '').split(path.delimiter);
+    for (const dir of pathDirs) {
+        const candidate = path.join(dir, binName);
+        if (fs.existsSync(candidate)) {
+            return candidate;
+        }
+    }
+    // 尝试查找 cargo 构建的二进制
+    const cargoHome = process.env.CARGO_HOME || path.join(os.homedir(), '.cargo');
+    const cargoBinPath = path.join(cargoHome, 'bin', binName);
+    if (fs.existsSync(cargoBinPath)) {
+        return cargoBinPath;
+    }
+    // 否则提供友好的安装提示
     throw new Error(`
-MoreCode binary not found.
-
-For this alpha version, you need to build it from source:
-1. Clone: git clone https://github.com/im10furry/MoreCode
-2. Install Rust: https://rustup.rs/
-3. Build: cd MoreCode && cargo build -p cli --release
-4. Copy the binary from target/release/${binName} to ${binPath}
-
-Or use cargo directly: cd MoreCode && cargo run -p cli -- --help
+╔═══════════════════════════════════════════════════════════════╗
+║                    MoreCode Binary Not Found                   ║
+╠═══════════════════════════════════════════════════════════════╣
+║                                                               ║
+║  To use MoreCode, you need to build it from source first:     ║
+║                                                               ║
+║  Option 1: Quick install (recommended)                        ║
+║  ──────────────────────────────────────────────────────────   ║
+║  1. Install Rust: https://rustup.rs/                         ║
+║  2. Run: cargo install morecode-agent --git https://github.com/im10furry/MoreCode.git ║
+║                                                               ║
+║  Option 2: Build from source                                  ║
+║  ──────────────────────────────────────────────────────────   ║
+║  1. git clone https://github.com/im10furry/MoreCode.git       ║
+║  2. cd MoreCode                                               ║
+║  3. cargo build -p cli --release                              ║
+║  4. Add target/release/ to your PATH                          ║
+║                                                               ║
+║  Option 3: Use cargo directly                                 ║
+║  ──────────────────────────────────────────────────────────   ║
+║  cd MoreCode && cargo run -p cli -- --help                    ║
+║                                                               ║
+╚═══════════════════════════════════════════════════════════════╝
 `);
 }
 function runBinary() {

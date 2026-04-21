@@ -1,0 +1,40 @@
+{
+  "name": "@morecode/agent",
+  "version": "0.1.0-alpha.2",
+  "description": "MoreCode Agent - A multi-agent orchestrated AI coding assistant",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "morecode": "./dist/bin/morecode.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "NPM_USAGE.md"
+  ],
+  "scripts": {
+    "prepublishOnly": "npm run build",
+    "build": "tsc"
+  },
+  "keywords": [
+    "ai",
+    "coding",
+    "agent",
+    "morecode",
+    "multi-agent",
+    "rust"
+  ],
+  "author": "MoreCode Contributors",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/im10furry/MoreCode.git"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

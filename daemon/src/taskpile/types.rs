@@ -216,6 +216,9 @@ pub struct TaskPileTask {
     pub next_run_at: Option<DateTime<Utc>>,
     pub last_claimed_at: Option<DateTime<Utc>>,
     pub lease_expires_at: Option<DateTime<Utc>>,
+    pub started_at: Option<DateTime<Utc>>,
+    pub completed_at: Option<DateTime<Utc>>,
+    pub execution_duration: Option<f64>, // in seconds
     pub attempts: u32,
     pub max_attempts: u32,
     pub last_error: Option<String>,
@@ -267,4 +270,19 @@ pub struct TaskPileStats {
     pub next_due_at: Option<DateTime<Utc>>,
     pub storage_path: String,
     pub cloud_ready: bool,
+    // Performance metrics
+    pub average_execution_time: Option<f64>, // in seconds
+    pub total_execution_time: f64, // in seconds
+    pub failure_rate: f64, // percentage
+    pub success_rate: f64, // percentage
+    pub throughput: f64, // tasks per hour
+    pub active_leases: usize,
+    pub expired_leases: usize,
+    // Resource usage
+    pub memory_usage: Option<u64>, // in bytes
+    pub cpu_usage: Option<f64>, // percentage
+    // Historical analysis
+    pub tasks_completed_24h: usize,
+    pub tasks_failed_24h: usize,
+    pub peak_concurrent_tasks: usize,
 }

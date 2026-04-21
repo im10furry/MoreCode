@@ -9,7 +9,34 @@ pub fn task_digest(instruction: &str, target: &TaskTarget, schedule: &TaskPileSc
     let mut hasher = DefaultHasher::new();
     instruction.hash(&mut hasher);
     target.hash(&mut hasher);
-    std::mem::discriminant(schedule).hash(&mut hasher);
+    // Hash the entire schedule including its values, not just the discriminant
+    match schedule {
+        super::types::TaskPileSchedule::Manual => {
+            "Manual".hash(&mut hasher);
+        }
+        super::types::TaskPileSchedule::At(at) => {
+            "At".hash(&mut hasher);
+            at.hash(&mut hasher);
+        }
+        super::types::TaskPileSchedule::IntervalSeconds(seconds) => {
+            "IntervalSeconds".hash(&mut hasher);
+            seconds.hash(&mut hasher);
+        }
+        super::types::TaskPileSchedule::Cron(cron) => {
+            "Cron".hash(&mut hasher);
+            cron.hash(&mut hasher);
+        }
+        super::types::TaskPileSchedule::WorkdayOnly { hour, minute } => {
+            "WorkdayOnly".hash(&mut hasher);
+            hour.hash(&mut hasher);
+            minute.hash(&mut hasher);
+        }
+        super::types::TaskPileSchedule::WeekendOnly { hour, minute } => {
+            "WeekendOnly".hash(&mut hasher);
+            hour.hash(&mut hasher);
+            minute.hash(&mut hasher);
+        }
+    }
     hasher.finish()
 }
 

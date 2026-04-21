@@ -161,12 +161,29 @@ impl CloudTaskAdapter for HttpCloudAdapter {
             return Err(TaskPileError::CloudAdapterUnavailable);
         };
 
-        // In a real implementation, we would make an HTTP request here
-        // For now, we'll simulate a successful response
-        Ok(CloudTaskResponse {
-            task_id: task.id.clone(),
-            accepted: true,
-            message: format!("Task submitted to {endpoint} for project {project_id}"),
-        })
+        // Create cloud task request
+        let cloud_request = CloudTaskRequest {
+            task: task.clone(),
+            project_id: project_id.clone(),
+        };
+
+        // Make HTTP POST request to cloud endpoint
+        let response = self.client
+            .post(endpoint)
+            .json(&cloud_request)
+            .send()
+            .map_err(|e| TaskPileError::CloudAdapterError(e.to_string()))?;
+
+        // Check if response is successful
+        if !response.status().is_success() {
+            return Err(TaskPileError::CloudAdapterError(format!("HTTP error: {}", response.status())));
+        }
+
+        // Parse response
+        let cloud_response: CloudTaskResponse = response
+            .json()
+            .map_err(|e| TaskPileError::CloudAdapterError(e.to_string()))?;
+
+        Ok(cloud_response)
     }
 }

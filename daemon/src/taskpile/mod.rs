@@ -2,6 +2,7 @@ mod cloud;
 mod crypto;
 mod logger;
 mod service;
+mod state_machine;
 mod store;
 mod types;
 mod utils;

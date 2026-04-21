@@ -10,16 +10,17 @@ use uuid::Uuid;
 use crate::error::{TaskPileError, TaskPileResult};
 
 use super::{
-    cloud::{CloudAdapterStatus, CloudPayload, CloudTaskAdapter, CloudTaskResponse, NoopCloudAdapter},
+    cloud::{CloudAdapterStatus, CloudPayload, CloudTaskAdapter, CloudTaskResponse, HttpCloudAdapter},
     crypto::init_encryption,
     logger::{init_logger, log_task_claim, log_task_completion, log_task_creation, log_task_failure, log_task_pause, log_task_resume, log_task_cancel},
+    state_machine::TaskPileStateMachine,
     store::{SqliteTaskPileStore, TaskPileState, TaskPileStorage},
     types::{
         ApprovalMode, CompressionMode, ExecutionOptions, IsolationProfile, NewTaskRequest,
         TaskPilePriority, TaskPileSchedule, TaskPileStats, TaskPileStatus, TaskPileTask,
         TaskTarget, TokenControls,
     },
-    utils::{count_status, retry_backoff, task_digest, truncate_title},
+    utils::{count_status, task_digest, truncate_title},
 };
 
 pub struct TaskPileService {
@@ -36,7 +37,7 @@ impl TaskPileService {
             .as_ref()
             .map(PathBuf::from)
             .unwrap_or_else(|| workspace_root.join(".morecode").join("taskpile"));
-        let cloud_adapter = Arc::new(NoopCloudAdapter::new(
+        let cloud_adapter = Arc::new(HttpCloudAdapter::new(
             config.cloud.enabled,
             config.cloud.endpoint.clone(),
             config.cloud.project_id.clone(),
@@ -60,7 +61,7 @@ impl TaskPileService {
         self.store.state_path().display().to_string()
     }
 
-    pub fn list_tasks(&self) -> TaskPileResult<Vec<TaskPileTask>> {
+    pub fn list_tasks(&self, page: Option<u32>, page_size: Option<u32>) -> TaskPileResult<Vec<TaskPileTask>> {
         let _lock = self.mutex.lock().unwrap();
         let mut tasks = self.store.load()?.tasks;
         tasks.sort_by(|left, right| {
@@ -69,6 +70,15 @@ impl TaskPileService {
                 .cmp(&left.priority)
                 .then_with(|| left.created_at.cmp(&right.created_at))
         });
+        
+        // Apply pagination
+        if let (Some(page), Some(page_size)) = (page, page_size) {
+            let page = page.saturating_sub(1); // Convert to 0-based index
+            let start = (page * page_size) as usize;
+            let end = start + page_size as usize;
+            tasks = tasks.into_iter().skip(start).take(page_size as usize).collect();
+        }
+        
         Ok(tasks)
     }
 
@@ -81,6 +91,26 @@ impl TaskPileService {
             .ok_or_else(|| TaskPileError::TaskNotFound {
                 task_id: task_id.to_string(),
             })
+    }
+
+    pub fn list_tasks_by_status(&self, status: TaskPileStatus) -> TaskPileResult<Vec<TaskPileTask>> {
+        let _lock = self.mutex.lock().unwrap();
+        let tasks = self.store.load()?.tasks;
+        let filtered_tasks: Vec<TaskPileTask> = tasks
+            .into_iter()
+            .filter(|task| task.status == status)
+            .collect();
+        Ok(filtered_tasks)
+    }
+
+    pub fn list_tasks_by_priority(&self, priority: TaskPilePriority) -> TaskPileResult<Vec<TaskPileTask>> {
+        let _lock = self.mutex.lock().unwrap();
+        let tasks = self.store.load()?.tasks;
+        let filtered_tasks: Vec<TaskPileTask> = tasks
+            .into_iter()
+            .filter(|task| task.priority == priority)
+            .collect();
+        Ok(filtered_tasks)
     }
 
     pub fn add_task(&self, request: NewTaskRequest) -> TaskPileResult<TaskPileTask> {
@@ -203,11 +233,19 @@ impl TaskPileService {
         };
 
         let task = state.tasks.get_mut(index).expect("task index checked");
-        task.status = TaskPileStatus::Running;
-        task.attempts = task.attempts.saturating_add(1);
-        task.last_claimed_at = Some(now);
-        task.lease_expires_at = Some(now + Duration::minutes(15));
-        task.updated_at = now;
+        
+        // Check for lease conflict
+        if task.status == TaskPileStatus::Running {
+            if let Some(lease_expires) = task.lease_expires_at {
+                if now <= lease_expires {
+                    // Task is already running with a valid lease
+                    return Ok(None);
+                }
+            }
+        }
+        
+        // Use state machine to transition to running
+        TaskPileStateMachine::transition_to_running(task, now)?;
         let claimed = task.clone();
         self.store.save(state)?;
         
@@ -219,19 +257,9 @@ impl TaskPileService {
 
     pub fn complete_task(&self, task_id: &str, summary: &str) -> TaskPileResult<TaskPileTask> {
         let _lock = self.mutex.lock().unwrap();
+        let now = Utc::now();
         let result = self.mutate_task(task_id, |task| {
-            if task.status != TaskPileStatus::Running {
-                return Err(TaskPileError::InvalidStatus {
-                    task_id: task.id.clone(),
-                    status: format!("{:?}", task.status),
-                });
-            }
-            task.status = TaskPileStatus::Completed;
-            task.result_summary = Some(summary.to_string());
-            task.last_error = None;
-            task.lease_expires_at = None;
-            task.updated_at = Utc::now();
-            Ok(())
+            TaskPileStateMachine::transition_to_completed(task, summary, now)
         });
         
         if let Ok(task) = &result {
@@ -244,23 +272,9 @@ impl TaskPileService {
 
     pub fn fail_task(&self, task_id: &str, reason: &str) -> TaskPileResult<TaskPileTask> {
         let _lock = self.mutex.lock().unwrap();
+        let now = Utc::now();
         let result = self.mutate_task(task_id, |task| {
-            if task.status != TaskPileStatus::Running {
-                return Err(TaskPileError::InvalidStatus {
-                    task_id: task.id.clone(),
-                    status: format!("{:?}", task.status),
-                });
-            }
-            task.last_error = Some(reason.to_string());
-            task.lease_expires_at = None;
-            task.updated_at = Utc::now();
-            if task.attempts < task.max_attempts {
-                task.status = TaskPileStatus::Queued;
-                task.next_run_at = Some(Utc::now() + retry_backoff(task.attempts));
-            } else {
-                task.status = TaskPileStatus::Failed;
-            }
-            Ok(())
+            TaskPileStateMachine::transition_to_failed(task, reason, now)
         });
         
         if let Ok(task) = &result {
@@ -273,18 +287,9 @@ impl TaskPileService {
 
     pub fn pause_task(&self, task_id: &str) -> TaskPileResult<TaskPileTask> {
         let _lock = self.mutex.lock().unwrap();
+        let now = Utc::now();
         let result = self.mutate_task(task_id, |task| {
-            if task.status == TaskPileStatus::Completed || task.status == TaskPileStatus::Cancelled
-            {
-                return Err(TaskPileError::InvalidStatus {
-                    task_id: task.id.clone(),
-                    status: format!("{:?}", task.status),
-                });
-            }
-            task.status = TaskPileStatus::Paused;
-            task.lease_expires_at = None;
-            task.updated_at = Utc::now();
-            Ok(())
+            TaskPileStateMachine::transition_to_paused(task, now)
         });
         
         if let Ok(task) = &result {
@@ -297,17 +302,9 @@ impl TaskPileService {
 
     pub fn resume_task(&self, task_id: &str) -> TaskPileResult<TaskPileTask> {
         let _lock = self.mutex.lock().unwrap();
+        let now = Utc::now();
         let result = self.mutate_task(task_id, |task| {
-            if task.status != TaskPileStatus::Paused {
-                return Err(TaskPileError::InvalidStatus {
-                    task_id: task.id.clone(),
-                    status: format!("{:?}", task.status),
-                });
-            }
-            task.status = TaskPileStatus::Queued;
-            task.next_run_at = Some(Utc::now());
-            task.updated_at = Utc::now();
-            Ok(())
+            TaskPileStateMachine::transition_to_resumed(task, now)
         });
         
         if let Ok(task) = &result {
@@ -320,17 +317,9 @@ impl TaskPileService {
 
     pub fn cancel_task(&self, task_id: &str) -> TaskPileResult<TaskPileTask> {
         let _lock = self.mutex.lock().unwrap();
+        let now = Utc::now();
         let result = self.mutate_task(task_id, |task| {
-            if task.status.is_terminal() {
-                return Err(TaskPileError::InvalidStatus {
-                    task_id: task.id.clone(),
-                    status: format!("{:?}", task.status),
-                });
-            }
-            task.status = TaskPileStatus::Cancelled;
-            task.lease_expires_at = None;
-            task.updated_at = Utc::now();
-            Ok(())
+            TaskPileStateMachine::transition_to_cancelled(task, now)
         });
         
         if let Ok(task) = &result {
@@ -344,23 +333,130 @@ impl TaskPileService {
     pub fn stats(&self) -> TaskPileResult<TaskPileStats> {
         let _lock = self.mutex.lock().unwrap();
         let state = self.store.load()?;
+        let now = Utc::now();
+        
+        // Basic status counts
+        let total = state.tasks.len();
+        let queued = count_status(&state, TaskPileStatus::Queued);
+        let running = count_status(&state, TaskPileStatus::Running);
+        let paused = count_status(&state, TaskPileStatus::Paused);
+        let completed = count_status(&state, TaskPileStatus::Completed);
+        let failed = count_status(&state, TaskPileStatus::Failed);
+        let cancelled = count_status(&state, TaskPileStatus::Cancelled);
+        
         let next_due_at = state
             .tasks
             .iter()
             .filter(|task| matches!(task.status, TaskPileStatus::Queued))
             .filter_map(|task| task.next_run_at.as_ref().cloned())
             .min();
+        
+        // Calculate execution time metrics
+        let mut total_execution_time = 0.0;
+        let mut execution_count = 0;
+        let mut tasks_completed_24h = 0;
+        let mut tasks_failed_24h = 0;
+        let day_ago = now - Duration::hours(24);
+        
+        for task in &state.tasks {
+            if let Some(duration) = task.execution_duration {
+                total_execution_time += duration;
+                execution_count += 1;
+            }
+            
+            if task.status == TaskPileStatus::Completed {
+                if let Some(completed_at) = task.completed_at {
+                    if completed_at >= day_ago {
+                        tasks_completed_24h += 1;
+                    }
+                }
+            } else if task.status == TaskPileStatus::Failed {
+                if let Some(updated_at) = task.updated_at {
+                    if updated_at >= day_ago {
+                        tasks_failed_24h += 1;
+                    }
+                }
+            }
+        }
+        
+        let average_execution_time = if execution_count > 0 {
+            Some(total_execution_time / execution_count as f64)
+        } else {
+            None
+        };
+        
+        // Calculate success/failure rates
+        let terminal_tasks = completed + failed + cancelled;
+        let failure_rate = if terminal_tasks > 0 {
+            (failed as f64 / terminal_tasks as f64) * 100.0
+        } else {
+            0.0
+        };
+        let success_rate = if terminal_tasks > 0 {
+            (completed as f64 / terminal_tasks as f64) * 100.0
+        } else {
+            0.0
+        };
+        
+        // Calculate throughput (tasks per hour)
+        let throughput = if total > 0 {
+            let oldest_task = state.tasks.iter().map(|t| t.created_at).min().unwrap_or(now);
+            let hours_since_oldest = now.signed_duration_since(oldest_task).num_hours() as f64;
+            if hours_since_oldest > 0 {
+                total as f64 / hours_since_oldest
+            } else {
+                0.0
+            }
+        } else {
+            0.0
+        };
+        
+        // Calculate lease metrics
+        let mut active_leases = 0;
+        let mut expired_leases = 0;
+        
+        for task in &state.tasks {
+            if task.status == TaskPileStatus::Running {
+                if let Some(lease_expires) = task.lease_expires_at {
+                    if lease_expires > now {
+                        active_leases += 1;
+                    } else {
+                        expired_leases += 1;
+                    }
+                }
+            }
+        }
+        
+        // Resource usage (placeholder values, would need actual system metrics)
+        let memory_usage = None; // Would use sysinfo crate to get actual memory usage
+        let cpu_usage = None; // Would use sysinfo crate to get actual CPU usage
+        
+        // Peak concurrent tasks (placeholder, would need historical data)
+        let peak_concurrent_tasks = running;
+        
         Ok(TaskPileStats {
-            total: state.tasks.len(),
-            queued: count_status(&state, TaskPileStatus::Queued),
-            running: count_status(&state, TaskPileStatus::Running),
-            paused: count_status(&state, TaskPileStatus::Paused),
-            completed: count_status(&state, TaskPileStatus::Completed),
-            failed: count_status(&state, TaskPileStatus::Failed),
-            cancelled: count_status(&state, TaskPileStatus::Cancelled),
+            total,
+            queued,
+            running,
+            paused,
+            completed,
+            failed,
+            cancelled,
             next_due_at,
             storage_path: self.store.state_path().display().to_string(),
             cloud_ready: self.cloud_adapter.status().ready,
+            average_execution_time,
+            total_execution_time,
+            failure_rate,
+            success_rate,
+            throughput,
+            active_leases,
+            expired_leases,
+            memory_usage,
+            cpu_usage,
+            tasks_completed_24h,
+            tasks_failed_24h,
+            peak_concurrent_tasks,
         })
     }
 
@@ -407,6 +503,16 @@ impl TaskPileService {
         self.cloud_adapter.submit_task(&task)
     }
 
+    pub fn renew_lease(&self, task_id: &str) -> TaskPileResult<TaskPileTask> {
+        let _lock = self.mutex.lock().unwrap();
+        let now = Utc::now();
+        let result = self.mutate_task(task_id, |task| {
+            TaskPileStateMachine::renew_lease(task, now)
+        });
+        
+        result
+    }
+
     fn mutate_task(
         &self,
         task_id: &str,
@@ -428,16 +534,7 @@ impl TaskPileService {
 
     fn cleanup_expired_leases(&self, state: &mut TaskPileState, now: DateTime<Utc>) {
         for task in &mut state.tasks {
-            if task.status == TaskPileStatus::Running {
-                if let Some(lease_expires) = task.lease_expires_at {
-                    if now > lease_expires {
-                        task.status = TaskPileStatus::Queued;
-                        task.lease_expires_at = None;
-                        task.updated_at = now;
-                        task.next_run_at = Some(now); // Set next_run_at to now so the task can be claimed immediately
-                    }
-                }
-            }
+            TaskPileStateMachine::cleanup_expired_lease(task, now);
         }
     }
 }
@@ -634,4 +731,201 @@ mod tests {
         let payload = service.preview_cloud_payload(&created.id).expect("preview payload");
         assert_eq!(payload.task_id, created.id);
     }
-}
+
+    #[test]
+    fn concurrent_task_operations() {
+        use std::sync::Arc;
+        use std::thread;
+
+        let temp = tempdir().expect("tempdir");
+        let service = Arc::new(TaskPileService::new(TaskPileConfig::default(), PathBuf::from(temp.path())));
+
+        // Create multiple tasks concurrently
+        let mut handles = vec![];
+        for i in 0..5 {
+            let service_clone = service.clone();
+            let handle = thread::spawn(move || {
+                let request = NewTaskRequest {
+                    instruction: format!("concurrent task {}", i),
+                    priority: if i % 2 == 0 { TaskPilePriority::High } else { TaskPilePriority::Normal },
+                    ..NewTaskRequest::default()
+                };
+                service_clone.add_task(request).expect("create task")
+            });
+            handles.push(handle);
+        }
+
+        // Wait for all tasks to be created
+        let task_ids: Vec<String> = handles.into_iter().map(|h| h.join().unwrap().id).collect();
+        assert_eq!(task_ids.len(), 5);
+
+        // Check that all tasks were created
+        let tasks = service.list_tasks(None, None).expect("list tasks");
+        assert_eq!(tasks.len(), 5);
+    }
+
+    #[test]
+    fn lease_renewal() {
+        let temp = tempdir().expect("tempdir");
+        let service = TaskPileService::new(TaskPileConfig::default(), PathBuf::from(temp.path()));
+        let request = NewTaskRequest {
+            instruction: "test lease renewal".to_string(),
+            ..NewTaskRequest::default()
+        };
+        let created = service.add_task(request).expect("create task");
+
+        // Claim the task
+        let now = Utc::now();
+        let claimed = service.claim_next_due(now).expect("claim").expect("task");
+        assert_eq!(claimed.id, created.id);
+        assert_eq!(claimed.status, TaskPileStatus::Running);
+
+        // Renew the lease
+        let renewed = service.renew_lease(&claimed.id).expect("renew lease");
+        assert_eq!(renewed.id, claimed.id);
+        assert!(renewed.lease_expires_at.is_some());
+        assert!(renewed.lease_expires_at.unwrap() > now);
+    }
+
+    #[test]
+    fn lease_conflict_detection() {
+        let temp = tempdir().expect("tempdir");
+        let service = TaskPileService::new(TaskPileConfig::default(), PathBuf::from(temp.path()));
+        let request = NewTaskRequest {
+            instruction: "test lease conflict".to_string(),
+            ..NewTaskRequest::default()
+        };
+        let created = service.add_task(request).expect("create task");
+
+        // Claim the task
+        let now = Utc::now();
+        let claimed = service.claim_next_due(now).expect("claim").expect("task");
+        assert_eq!(claimed.id, created.id);
+
+        // Try to claim the same task again immediately (should fail due to active lease)
+        let claimed_again = service.claim_next_due(now).expect("claim again");
+        assert!(claimed_again.is_none());
+    }
+
+    #[test]
+    fn storage_recovery() {
+        let temp = tempdir().expect("tempdir");
+        let service = TaskPileService::new(TaskPileConfig::default(), PathBuf::from(temp.path()));
+        
+        // Create some tasks
+        for i in 0..3 {
+            let request = NewTaskRequest {
+                instruction: format!("recovery test task {}", i),
+                ..NewTaskRequest::default()
+            };
+            service.add_task(request).expect("create task");
+        }
+
+        // Create a new service instance with the same storage directory
+        let service2 = TaskPileService::new(TaskPileConfig::default(), PathBuf::from(temp.path()));
+        let tasks = service2.list_tasks(None, None).expect("list tasks");
+        assert_eq!(tasks.len(), 3);
+    }
+
+    #[test]
+    fn task_execution_time_tracking() {
+        let temp = tempdir().expect("tempdir");
+        let service = TaskPileService::new(TaskPileConfig::default(), PathBuf::from(temp.path()));
+        let request = NewTaskRequest {
+            instruction: "test execution time tracking".to_string(),
+            ..NewTaskRequest::default()
+        };
+        let created = service.add_task(request).expect("create task");
+
+        // Claim the task
+        let now = Utc::now();
+        let claimed = service.claim_next_due(now).expect("claim").expect("task");
+        assert!(claimed.started_at.is_some());
+
+        // Simulate some work
+        std::thread::sleep(std::time::Duration::milliseconds(100));
+
+        // Complete the task
+        let completed = service.complete_task(&claimed.id, "completed").expect("complete task");
+        assert_eq!(completed.status, TaskPileStatus::Completed);
+        assert!(completed.completed_at.is_some());
+        assert!(completed.execution_duration.is_some());
+        assert!(completed.execution_duration.unwrap() > 0.0);
+    }
+
+    #[test]
+    fn pagination() {
+        let temp = tempdir().expect("tempdir");
+        let service = TaskPileService::new(TaskPileConfig::default(), PathBuf::from(temp.path()));
+        
+        // Create 10 tasks
+        for i in 0..10 {
+            let request = NewTaskRequest {
+                instruction: format!("pagination test task {}", i),
+                ..NewTaskRequest::default()
+            };
+            service.add_task(request).expect("create task");
+        }
+
+        // Test pagination
+        let page1 = service.list_tasks(Some(1), Some(5)).expect("page 1");
+        assert_eq!(page1.len(), 5);
+        
+        let page2 = service.list_tasks(Some(2), Some(5)).expect("page 2");
+        assert_eq!(page2.len(), 5);
+        
+        let page3 = service.list_tasks(Some(3), Some(5)).expect("page 3");
+        assert_eq!(page3.len(), 0);
+    }
+
+    #[test]
+    fn task_filtering() {
+        let temp = tempdir().expect("tempdir");
+        let service = TaskPileService::new(TaskPileConfig::default(), PathBuf::from(temp.path()));
+        
+        // Create tasks with different statuses
+        let request1 = NewTaskRequest {
+            instruction: "queued task".to_string(),
+            ..NewTaskRequest::default()
+        };
+        service.add_task(request1).expect("create queued task");
+
+        let request2 = NewTaskRequest {
+            instruction: "running task".to_string(),
+            ..NewTaskRequest::default()
+        };
+        let running_task = service.add_task(request2).expect("create running task");
+        service.claim_next_due(Utc::now()).expect("claim task");
+
+        // Test filtering by status
+        let queued_tasks = service.list_tasks_by_status(TaskPileStatus::Queued).expect("queued tasks");
+        assert_eq!(queued_tasks.len(), 1);
+        
+        let running_tasks = service.list_tasks_by_status(TaskPileStatus::Running).expect("running tasks");
+        assert_eq!(running_tasks.len(), 1);
+    }
+
+    #[test]
+    fn stats_calculation() {
+        let temp = tempdir().expect("tempdir");
+        let service = TaskPileService::new(TaskPileConfig::default(), PathBuf::from(temp.path()));
+        
+        // Create and complete a task
+        let request = NewTaskRequest {
+            instruction: "test stats".to_string(),
+            ..NewTaskRequest::default()
+        };
+        let created = service.add_task(request).expect("create task");
+        service.claim_next_due(Utc::now()).expect("claim task");
+        service.complete_task(&created.id, "completed").expect("complete task");
+
+        // Check stats
+        let stats = service.stats().expect("stats");
+        assert_eq!(stats.total, 1);
+        assert_eq!(stats.completed, 1);
+        assert!(stats.average_execution_time.is_some());
+        assert!(stats.total_execution_time > 0.0);
+        assert_eq!(stats.success_rate, 100.0);
+        assert_eq!(stats.failure_rate, 0.0);
+    }
+}  

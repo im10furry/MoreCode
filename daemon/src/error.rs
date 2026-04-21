@@ -46,6 +46,8 @@ pub enum TaskPileError {
     RunningLimitReached { current: usize, limit: usize },
     #[error("cloud adapter is unavailable")]
     CloudAdapterUnavailable,
+    #[error("cloud adapter error: {0}")]
+    CloudAdapterError(String),
     #[error("invalid taskpile option: {0}")]
     InvalidOption(String),
     #[error("invalid taskpile schedule: {0}")]

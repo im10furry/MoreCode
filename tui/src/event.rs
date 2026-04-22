@@ -22,6 +22,10 @@ pub enum KeyAction {
     ToggleSetting,
     Help,
     Quit,
+    NextProject,
+    PreviousProject,
+    NextProjectMode,
+    PreviousProjectMode,
 }
 
 impl KeyAction {
@@ -38,6 +42,10 @@ impl KeyAction {
             (KeyCode::BackTab, _) | (KeyCode::Left, _) | (KeyCode::Char('h'), _) => {
                 Some(Self::PreviousPanel)
             }
+            (KeyCode::Right, KeyModifiers::ALT) => Some(Self::NextProject),
+            (KeyCode::Left, KeyModifiers::ALT) => Some(Self::PreviousProject),
+            (KeyCode::Up, KeyModifiers::ALT) => Some(Self::NextProjectMode),
+            (KeyCode::Down, KeyModifiers::ALT) => Some(Self::PreviousProjectMode),
             (KeyCode::Char(']'), _) => Some(Self::NextMode),
             (KeyCode::Char('['), _) => Some(Self::PreviousMode),
             (KeyCode::Char('1'), _) => Some(Self::SetStreamMode(StreamMode::Progress)),

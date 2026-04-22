@@ -5,7 +5,7 @@ use chrono::{DateTime, Utc};
 use mc_communication::{
     ApprovalRequest, ApprovalResponse, BroadcastEvent, ControlMessage, StateMessage,
 };
-use mc_core::{AgentExecutionStatus, AgentType};
+use mc_core::{AgentExecutionStatus, AgentType, ProjectManager};
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::Modifier;
 use ratatui::text::{Line, Span};
@@ -32,18 +32,20 @@ pub enum Panel {
     Communication,
     TokenUsage,
     Log,
+    Projects,
     Settings,
     Help,
 }
 
 impl Panel {
-    pub const ALL: [Self; 8] = [
+    pub const ALL: [Self; 9] = [
         Self::Dashboard,
         Self::AgentStatus,
         Self::TaskProgress,
         Self::Communication,
         Self::TokenUsage,
         Self::Log,
+        Self::Projects,
         Self::Settings,
         Self::Help,
     ];
@@ -56,6 +58,7 @@ impl Panel {
             Self::Communication => text(lang, TextKey::PanelTopology),
             Self::TokenUsage => text(lang, TextKey::PanelTokens),
             Self::Log => text(lang, TextKey::PanelLogs),
+            Self::Projects => text(lang, TextKey::PanelProjects),
             Self::Settings => text(lang, TextKey::PanelSettings),
             Self::Help => text(lang, TextKey::PanelHelp),
         }
@@ -259,6 +262,7 @@ pub struct AppState {
     pub(crate) token_total: u64,
     pub(crate) token_history: VecDeque<u64>,
     pub(crate) scroll_offsets: BTreeMap<Panel, u16>,
+    pub(crate) project_manager: ProjectManager,
 }
 
 #[derive(Debug, Clone)]
@@ -362,6 +366,40 @@ impl App {
             }
             AppEvent::Key(KeyAction::Quit) => {
                 self.state.should_quit = true;
+                Ok(())
+            }
+            AppEvent::Key(KeyAction::NextProject) => {
+                self.state.project_manager.next_project();
+                Ok(())
+            }
+            AppEvent::Key(KeyAction::PreviousProject) => {
+                self.state.project_manager.previous_project();
+                Ok(())
+            }
+            AppEvent::Key(KeyAction::NextProjectMode) => {
+                if let Some(project) = self.state.project_manager.active_project_mut() {
+                    let current_mode = project.mode;
+                    let next_mode = match current_mode {
+                        crate::mc_core::ProjectMode::Fast => crate::mc_core::ProjectMode::Medium,
+                        crate::mc_core::ProjectMode::Medium => crate::mc_core::ProjectMode::Full,
+                        crate::mc_core::ProjectMode::Full => crate::mc_core::ProjectMode::Custom,
+                        crate::mc_core::ProjectMode::Custom => crate::mc_core::ProjectMode::Fast,
+                    };
+                    project.set_mode(next_mode);
+                }
+                Ok(())
+            }
+            AppEvent::Key(KeyAction::PreviousProjectMode) => {
+                if let Some(project) = self.state.project_manager.active_project_mut() {
+                    let current_mode = project.mode;
+                    let prev_mode = match current_mode {
+                        crate::mc_core::ProjectMode::Fast => crate::mc_core::ProjectMode::Custom,
+                        crate::mc_core::ProjectMode::Medium => crate::mc_core::ProjectMode::Fast,
+                        crate::mc_core::ProjectMode::Full => crate::mc_core::ProjectMode::Medium,
+                        crate::mc_core::ProjectMode::Custom => crate::mc_core::ProjectMode::Full,
+                    };
+                    project.set_mode(prev_mode);
+                }
                 Ok(())
             }
             AppEvent::Update(update) => self.apply_update(*update),
@@ -1113,6 +1151,7 @@ impl AppState {
             token_total: 0,
             token_history: VecDeque::from([0]),
             scroll_offsets,
+            project_manager: ProjectManager::new(),
         }
     }
 
@@ -1273,6 +1312,25 @@ impl AppState {
             .iter()
             .filter(|entry| entry.status == ConfirmationStatus::Pending)
             .count()
+    }
+
+    pub fn project_manager(&self) -> &ProjectManager {
+        &self.project_manager
+    }
+
+    pub fn project_manager_mut(&mut self) -> &mut ProjectManager {
+        &mut self.project_manager
+    }
+
+    pub fn active_project_name(&self) -> String {
+        self.project_manager
+            .active_project()
+            .map(|project| project.info.name.clone())
+            .unwrap_or_else(|| "No Project".to_string())
+    }
+
+    pub fn project_count(&self) -> usize {
+        self.project_manager.projects.len()
     }
 }
 

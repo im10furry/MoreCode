@@ -7,6 +7,7 @@ pub mod error;
 pub mod id;
 pub mod line_ending;
 pub mod message;
+pub mod project;
 pub mod result;
 pub mod task;
 pub mod time;
@@ -22,6 +23,7 @@ pub use line_ending::{
     EolStats, LineEnding,
 };
 pub use message::{FinishReason, MessageRole};
+pub use project::*;
 pub use result::{AgentExecutionReport, TaskResult};
 pub use task::*;
 pub use time::{format_duration, now_utc};

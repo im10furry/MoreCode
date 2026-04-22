@@ -12,6 +12,8 @@ pub fn render(frame: &mut Frame, area: Rect, state: &AppState, theme: TuiTheme) 
     let lines = vec![
         Line::from(text(lang, TextKey::HelpSwitchPanels)),
         Line::from(text(lang, TextKey::HelpSwitchStreams)),
+        Line::from(text(lang, TextKey::HelpSwitchProjects)),
+        Line::from(text(lang, TextKey::HelpSwitchProjectMode)),
         Line::from(text(lang, TextKey::HelpCycleMode)),
         Line::from(text(lang, TextKey::HelpScroll)),
         Line::from(text(lang, TextKey::HelpToggleLanguage)),
@@ -27,6 +29,16 @@ pub fn render(frame: &mut Frame, area: Rect, state: &AppState, theme: TuiTheme) 
             "{} {}",
             text(lang, TextKey::HelpActiveStream),
             state.stream_mode().title(lang)
+        )),
+        Line::from(format!(
+            "{} {}",
+            text(lang, TextKey::ProjectName),
+            state.active_project_name()
+        )),
+        Line::from(format!(
+            "{} {}",
+            text(lang, TextKey::ProjectMode),
+            state.project_manager().active_project().map(|p| p.mode.as_str()).unwrap_or("None")
         )),
     ];
     let paragraph = Paragraph::new(lines)

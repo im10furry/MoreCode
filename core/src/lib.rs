@@ -8,6 +8,7 @@ pub mod id;
 pub mod line_ending;
 pub mod message;
 pub mod result;
+pub mod run;
 pub mod task;
 pub mod time;
 pub mod token;
@@ -23,6 +24,7 @@ pub use line_ending::{
 };
 pub use message::{FinishReason, MessageRole};
 pub use result::{AgentExecutionReport, TaskResult};
+pub use run::*;
 pub use task::*;
 pub use time::{format_duration, now_utc};
 pub use token::{ModelInfo, TokenUsage, ToolDefinition};

@@ -763,10 +763,13 @@ fn render_provider_append_snippet(imports: &[(String, DetectedProvider)]) -> Str
                 escape_toml_string(base_url)
             ));
         }
-        if let Some(api_key) = provider.api_key.as_deref().filter(|v| !v.trim().is_empty()) {
+        let api_key_value = provider.api_key.as_deref()
+            .filter(|v| !v.trim().is_empty())
+            .or_else(|| provider.api_key_env.as_deref().filter(|v| looks_like_valid_api_key(v)));
+        if let Some(key) = api_key_value {
             out.push_str(&format!(
                 "api_key = \"{}\"\n",
-                escape_toml_string(api_key)
+                escape_toml_string(key)
             ));
         } else if let Some(env) = provider.api_key_env.as_deref().filter(|v| !v.trim().is_empty()) {
             out.push_str(&format!(
@@ -786,6 +789,12 @@ fn render_provider_append_snippet(imports: &[(String, DetectedProvider)]) -> Str
         }
     }
 
+    if !imports.is_empty() {
+        out.push_str("\ndefault_provider = \"");
+        out.push_str(&imports[0].0);
+        out.push_str("\"\n");
+    }
+
     out
 }
 
@@ -794,7 +803,26 @@ fn escape_toml_key(value: &str) -> String {
 }
 
 fn escape_toml_string(value: &str) -> String {
-    value.replace('\\', "\\\\").replace('\"', "\\\"")
+    value.replace('\\', "\\\\").replace('"', "\\\"")
+}
+
+fn looks_like_valid_api_key(value: &str) -> bool {
+    if value.len() < 16 {
+        return false;
+    }
+    if value.starts_with("sk-") {
+        return true;
+    }
+    if value.contains('_') {
+        let prefix = value.split('_').next().unwrap_or("");
+        if prefix.len() >= 2 && prefix.len() <= 6 && prefix.chars().all(|c| c.is_ascii_lowercase()) {
+            let rest = value.strip_prefix(&format!("{}_", prefix)).unwrap_or("");
+            if rest.len() >= 20 && rest.chars().all(|c| c.is_ascii_hexdigit() || c == '-') {
+                return true;
+            }
+        }
+    }
+    value.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
 }
 
 async fn apply_snippet(target_path: &Path, snippet: &str) -> Result<(), String> {

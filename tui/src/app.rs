@@ -1,16 +1,21 @@
 use std::collections::{BTreeMap, VecDeque};
 use std::fmt;
+use std::path::PathBuf;
 
 use chrono::{DateTime, Utc};
+use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
 use mc_communication::{
     ApprovalRequest, ApprovalResponse, BroadcastEvent, ControlMessage, StateMessage,
 };
-use mc_core::{AgentExecutionStatus, AgentType};
+use mc_core::{AgentExecutionStatus, AgentType, RunEvent, RunEventEnvelope, RunSnapshot};
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
-use ratatui::style::Modifier;
+use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Paragraph, Tabs};
+use ratatui::widgets::{Block, Borders, Paragraph, Tabs};
 use ratatui::Frame;
+use toml::Value;
+
+use mc_core::SemanticColor;
 
 use crate::error::TuiError;
 use crate::event::{AppEvent, KeyAction, LogLevel, TuiUpdate};
@@ -247,6 +252,8 @@ pub struct AppState {
     pub(crate) max_log_entries: usize,
     pub(crate) mouse_support: bool,
     pub(crate) settings_index: usize,
+    pub(crate) approval_index: usize,
+    pub(crate) patch_index: usize,
     pub(crate) title: String,
     pub(crate) should_quit: bool,
     pub(crate) terminal_size: (u16, u16),
@@ -259,6 +266,8 @@ pub struct AppState {
     pub(crate) token_total: u64,
     pub(crate) token_history: VecDeque<u64>,
     pub(crate) scroll_offsets: BTreeMap<Panel, u16>,
+    pub(crate) run_snapshot: Option<RunSnapshot>,
+    pub(crate) settings_persist_path: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone)]
@@ -285,6 +294,10 @@ impl App {
 
     pub fn state_mut(&mut self) -> &mut AppState {
         &mut self.state
+    }
+
+    pub fn load_run(&mut self, snapshot: RunSnapshot) {
+        self.state.load_run(snapshot);
     }
 
     pub fn handle_event(&mut self, event: AppEvent) -> Result<(), TuiError> {
@@ -337,7 +350,11 @@ impl App {
             }
             AppEvent::Key(KeyAction::ToggleLanguage) => {
                 self.state.language = self.state.language.toggle();
-                self.push_log(LogLevel::Info, format!("language: {:?}", self.state.language));
+                self.push_log(
+                    LogLevel::Info,
+                    format!("language: {:?}", self.state.language),
+                );
+                self.persist_settings_nonfatal();
                 Ok(())
             }
             AppEvent::Key(KeyAction::Settings) => {
@@ -356,6 +373,19 @@ impl App {
                 self.apply_setting_toggle();
                 Ok(())
             }
+            AppEvent::Key(KeyAction::NextItem) => {
+                self.move_review_selection(1);
+                Ok(())
+            }
+            AppEvent::Key(KeyAction::PreviousItem) => {
+                self.move_review_selection(-1);
+                Ok(())
+            }
+            AppEvent::Key(KeyAction::Approve) => self.resolve_current_approval(true),
+            AppEvent::Key(KeyAction::Reject) => self.resolve_current_approval(false),
+            AppEvent::Key(KeyAction::AcceptPatch) => self.resolve_current_patch(true),
+            AppEvent::Key(KeyAction::RejectPatch) => self.resolve_current_patch(false),
+            AppEvent::Mouse(mouse) => self.handle_mouse(mouse),
             AppEvent::Key(KeyAction::Help) => {
                 self.state.active_panel = Panel::Help;
                 Ok(())
@@ -392,21 +422,26 @@ impl App {
             .collect::<Vec<_>>();
         let title = Line::from(vec![
             Span::styled(
-                self.state.title.clone(),
-                self.theme.text().add_modifier(Modifier::BOLD),
+                " MoreCode ",
+                self.theme.accent().add_modifier(Modifier::BOLD),
             ),
-            Span::raw("  "),
             Span::styled(
-                format!("stream: {}", self.state.stream_mode.title(lang)),
-                self.theme.accent(),
+                format!("{} ", self.state.stream_mode.title(lang)),
+                self.theme.muted(),
             ),
         ]);
         let tabs = Tabs::new(titles)
             .select(active_panel_index(self.state.active_panel))
-            .block(self.theme.panel_block(title, true))
+            .block(
+                Block::default()
+                    .title(title)
+                    .borders(Borders::BOTTOM)
+                    .border_style(Style::default().fg(self.theme.semantic_color(SemanticColor::Border)))
+                    .style(self.theme.background_style()),
+            )
             .style(self.theme.muted())
             .highlight_style(self.theme.accent().add_modifier(Modifier::BOLD))
-            .divider(" | ");
+            .divider(Span::styled(" ", self.theme.muted()));
         frame.render_widget(tabs, area);
     }
 
@@ -414,35 +449,33 @@ impl App {
         let lang = self.state.language;
         let progress = self.state.overall_progress();
         let token_summary = match self.state.token_budget_total() {
-            Some(budget) => format!("tokens {}/{}", self.state.token_total, budget),
-            None => format!("tokens {}", self.state.token_total),
+            Some(budget) => format!("{} / {}", self.state.token_total, budget),
+            None => format!("{}", self.state.token_total),
         };
         let mut spans = vec![
-            Span::styled("Tab", self.theme.accent()),
-            Span::raw(text(lang, TextKey::FooterNext)),
-            Span::styled("Shift+Tab", self.theme.accent()),
-            Span::raw(text(lang, TextKey::FooterPrev)),
-            Span::styled("1/2/3", self.theme.accent()),
-            Span::raw(text(lang, TextKey::FooterStreams)),
-            Span::styled("j/k", self.theme.accent()),
-            Span::raw(text(lang, TextKey::FooterScroll)),
-            Span::styled("?/q", self.theme.accent()),
-            Span::raw(text(lang, TextKey::FooterHelpQuit)),
-            Span::styled(
-                format!("{} {progress}%", text(lang, TextKey::FooterProgress)),
-                self.theme.text(),
-            ),
+            Span::styled(" Tab ", self.theme.accent().add_modifier(Modifier::BOLD)),
+            Span::styled(text(lang, TextKey::FooterNext), self.theme.muted()),
+            Span::styled(" ", self.theme.muted()),
+            Span::styled("? ", self.theme.accent().add_modifier(Modifier::BOLD)),
+            Span::styled(text(lang, TextKey::FooterHelpQuit), self.theme.muted()),
+            Span::styled(" ", self.theme.muted()),
+            Span::styled(format!("{progress}% "), self.theme.text()),
             Span::raw("  "),
         ];
         let token_style = if self.state.has_budget_warning() {
             self.theme.warning()
         } else {
-            self.theme.text()
+            self.theme.muted()
         };
-        spans.push(Span::styled(token_summary, token_style));
+        spans.push(Span::styled(format!("{} tokens", token_summary), token_style));
 
         let footer = Paragraph::new(Line::from(spans))
-            .block(self.theme.panel_block(text(lang, TextKey::FooterControls), false))
+            .block(
+                Block::default()
+                    .borders(Borders::TOP)
+                    .border_style(Style::default().fg(self.theme.semantic_color(SemanticColor::Border)))
+                    .style(self.theme.background_style()),
+            )
             .style(self.theme.muted());
         frame.render_widget(footer, area);
     }
@@ -454,11 +487,90 @@ impl App {
             TuiUpdate::Broadcast(event) => self.apply_broadcast_event(event),
             TuiUpdate::ApprovalRequest(request) => self.apply_approval_request(request),
             TuiUpdate::ApprovalResponse(response) => self.apply_approval_response(response),
+            TuiUpdate::RunEvent(event) => self.apply_run_event(event),
             TuiUpdate::Log { level, message } => {
                 self.push_log(level, message);
                 Ok(())
             }
         }
+    }
+
+    fn apply_run_event(&mut self, event: RunEventEnvelope) -> Result<(), TuiError> {
+        if self.state.run_snapshot.is_none() {
+            self.state.run_snapshot = Some(run_snapshot_from_event(&event));
+        }
+        let mut total_tokens = None;
+        if let Some(snapshot) = self.state.run_snapshot.as_mut() {
+            snapshot.apply(&event);
+            total_tokens = Some(snapshot.summary.total_tokens);
+        }
+        if let Some(total_tokens) = total_tokens {
+            self.state.token_total = total_tokens;
+            self.push_token_sample(total_tokens);
+        }
+        self.clamp_review_indices();
+
+        match &event.event {
+            RunEvent::Message { level, message, .. } => {
+                self.push_log(run_level_to_log(*level), message.clone());
+            }
+            RunEvent::Error { message, .. } => {
+                self.push_log(LogLevel::Error, message.clone());
+            }
+            RunEvent::PatchProposed { patch } => {
+                self.push_log(
+                    LogLevel::Info,
+                    format!("patch proposed: {}", patch.file_path),
+                );
+            }
+            RunEvent::ApprovalRequested { approval } => {
+                self.push_log(
+                    LogLevel::Warn,
+                    format!("approval requested: {}", approval.title),
+                );
+            }
+            RunEvent::ApprovalResolved {
+                approval_id,
+                status,
+                ..
+            } => {
+                self.push_log(
+                    LogLevel::Info,
+                    format!("approval resolved: {approval_id} -> {:?}", status),
+                );
+            }
+            RunEvent::CommandStarted { command } => {
+                self.push_log(LogLevel::Info, format!("command: {}", command.command));
+            }
+            RunEvent::CommandFinished {
+                command_id,
+                status,
+                exit_code,
+                ..
+            } => {
+                self.push_log(
+                    if matches!(status, mc_core::CommandStatus::Failed) {
+                        LogLevel::Error
+                    } else {
+                        LogLevel::Info
+                    },
+                    format!("command {command_id} -> {:?} {:?}", status, exit_code),
+                );
+            }
+            RunEvent::RunFinished { summary, .. } => {
+                if let Some(summary) = summary {
+                    self.push_log(LogLevel::Info, summary.clone());
+                }
+            }
+            RunEvent::RunStarted { .. }
+            | RunEvent::StepStarted { .. }
+            | RunEvent::StepFinished { .. }
+            | RunEvent::PatchResolved { .. }
+            | RunEvent::ArtifactWritten { .. }
+            | RunEvent::CommandOutput { .. } => {}
+        }
+
+        Ok(())
     }
 
     fn apply_control_message(&mut self, message: ControlMessage) -> Result<(), TuiError> {
@@ -952,10 +1064,12 @@ impl App {
     }
 
     fn apply_setting_delta(&mut self, direction: i8) {
+        let mut changed = false;
         match self.state.settings_index {
             0 => {
                 if direction != 0 {
                     self.state.language = self.state.language.toggle();
+                    changed = true;
                 }
             }
             1 => {
@@ -965,32 +1079,356 @@ impl App {
                 } else {
                     self.state.tick_rate_ms = self.state.tick_rate_ms.saturating_sub(step).max(16);
                 }
+                changed = true;
             }
             2 => {
                 let step = 50usize;
                 if direction > 0 {
-                    self.state.set_max_log_entries(self.state.max_log_entries.saturating_add(step));
-                } else {
                     self.state
-                        .set_max_log_entries(self.state.max_log_entries.saturating_sub(step).max(10));
+                        .set_max_log_entries(self.state.max_log_entries.saturating_add(step));
+                } else {
+                    self.state.set_max_log_entries(
+                        self.state.max_log_entries.saturating_sub(step).max(10),
+                    );
                 }
+                changed = true;
             }
             3 => {
                 self.state.mouse_support = !self.state.mouse_support;
+                changed = true;
+            }
+            _ => {}
+        }
+        if changed {
+            self.persist_settings_nonfatal();
+        }
+    }
+
+    fn apply_setting_toggle(&mut self) {
+        let mut changed = false;
+        match self.state.settings_index {
+            0 => {
+                self.state.language = self.state.language.toggle();
+                changed = true;
+            }
+            3 => {
+                self.state.mouse_support = !self.state.mouse_support;
+                changed = true;
+            }
+            _ => {}
+        }
+        if changed {
+            self.persist_settings_nonfatal();
+        }
+    }
+
+    fn persist_settings_nonfatal(&mut self) {
+        let Some(path) = self.state.settings_persist_path.clone() else {
+            return;
+        };
+
+        if let Err(error) = persist_tui_settings(
+            &path,
+            self.state.language,
+            self.state.tick_rate_ms,
+            self.state.max_log_entries,
+            self.state.mouse_support,
+            self.theme.name(),
+        ) {
+            self.push_log(
+                LogLevel::Warn,
+                format!("failed to persist TUI settings: {error}"),
+            );
+        }
+    }
+
+    fn handle_mouse(&mut self, mouse: MouseEvent) -> Result<(), TuiError> {
+        match mouse.kind {
+            MouseEventKind::ScrollUp => {
+                self.adjust_scroll(-3);
+                return Ok(());
+            }
+            MouseEventKind::ScrollDown => {
+                self.adjust_scroll(3);
+                return Ok(());
+            }
+            MouseEventKind::Down(button) => {
+                if button == MouseButton::Left || button == MouseButton::Right {
+                    return self.handle_mouse_click(mouse.column, mouse.row, button);
+                }
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
+    fn handle_mouse_click(
+        &mut self,
+        column: u16,
+        row: u16,
+        button: MouseButton,
+    ) -> Result<(), TuiError> {
+        let (width, height) = self.state.terminal_size;
+        if width == 0 || height == 0 {
+            return Ok(());
+        }
+
+        let full = Rect::new(0, 0, width, height);
+        let root = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(3),
+                Constraint::Min(0),
+                Constraint::Length(2),
+            ])
+            .split(full);
+        let header = root[0];
+        let content = root[1];
+
+        if contains(header, column, row) {
+            if let Some(index) =
+                proportional_index(column, header.x, header.width, Panel::ALL.len())
+            {
+                self.state.active_panel = Panel::ALL[index];
+            }
+            return Ok(());
+        }
+
+        if !contains(content, column, row) {
+            return Ok(());
+        }
+
+        match self.state.active_panel {
+            Panel::Settings => self.handle_settings_click(content, column, row, button),
+            Panel::TaskProgress => self.handle_task_progress_click(content, column, row),
+            Panel::AgentStatus => self.handle_agent_status_click(content, column, row, button),
+            _ => Ok(()),
+        }
+    }
+
+    fn handle_settings_click(
+        &mut self,
+        content: Rect,
+        column: u16,
+        row: u16,
+        button: MouseButton,
+    ) -> Result<(), TuiError> {
+        let line = row.saturating_sub(content.y).saturating_sub(1) as usize;
+        if line > 4 {
+            return Ok(());
+        }
+        self.state.active_panel = Panel::Settings;
+        self.state.settings_index = line;
+        match line {
+            0 | 3 => self.apply_setting_toggle(),
+            1 | 2 => {
+                let delta =
+                    if button == MouseButton::Right || column < content.x + content.width / 2 {
+                        -1
+                    } else {
+                        1
+                    };
+                self.apply_setting_delta(delta);
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
+    fn handle_task_progress_click(
+        &mut self,
+        content: Rect,
+        column: u16,
+        row: u16,
+    ) -> Result<(), TuiError> {
+        let sections = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(3),
+                Constraint::Length(4),
+                Constraint::Min(0),
+            ])
+            .split(content);
+        let tabs = sections[0];
+        if contains(tabs, column, row) {
+            if let Some(index) =
+                proportional_index(column, tabs.x, tabs.width, StreamMode::ALL.len())
+            {
+                self.state.stream_mode = StreamMode::ALL[index];
+            }
+        }
+        Ok(())
+    }
+
+    fn handle_agent_status_click(
+        &mut self,
+        content: Rect,
+        column: u16,
+        row: u16,
+        button: MouseButton,
+    ) -> Result<(), TuiError> {
+        let Some(snapshot) = self.state.run_snapshot.as_ref() else {
+            return Ok(());
+        };
+        let sections = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(9),
+                Constraint::Percentage(45),
+                Constraint::Min(0),
+            ])
+            .split(content);
+        if contains(sections[0], column, row) {
+            let data_row = row.saturating_sub(sections[0].y).saturating_sub(2) as usize;
+            if !snapshot.summary.approvals.is_empty() {
+                let next_index = data_row.min(snapshot.summary.approvals.len() - 1);
+                let was_selected = self.state.approval_index == next_index;
+                self.state.approval_index = next_index;
+                if was_selected {
+                    if button == MouseButton::Left {
+                        self.resolve_current_approval(true)?;
+                    } else if button == MouseButton::Right {
+                        self.resolve_current_approval(false)?;
+                    }
+                }
+            }
+        } else if contains(sections[1], column, row) && !snapshot.summary.patches.is_empty() {
+            if button == MouseButton::Left {
+                self.resolve_current_patch(true)?;
+            } else if button == MouseButton::Right {
+                self.resolve_current_patch(false)?;
+            }
+        }
+        Ok(())
+    }
+
+    fn move_review_selection(&mut self, delta: i8) {
+        let Some(snapshot) = self.state.run_snapshot.as_ref() else {
+            return;
+        };
+
+        match self.state.active_panel {
+            Panel::AgentStatus => {
+                let len = snapshot.summary.approvals.len();
+                if len == 0 {
+                    return;
+                }
+                self.state.approval_index = wrap_index(self.state.approval_index, len, delta);
+            }
+            Panel::Dashboard => {
+                let len = snapshot.summary.patches.len();
+                if len == 0 {
+                    return;
+                }
+                self.state.patch_index = wrap_index(self.state.patch_index, len, delta);
             }
             _ => {}
         }
     }
 
-    fn apply_setting_toggle(&mut self) {
-        match self.state.settings_index {
-            0 => {
-                self.state.language = self.state.language.toggle();
+    fn resolve_current_approval(&mut self, approved: bool) -> Result<(), TuiError> {
+        let Some(snapshot) = self.state.run_snapshot.clone() else {
+            return Ok(());
+        };
+        if snapshot.summary.approvals.is_empty() {
+            self.push_log(LogLevel::Warn, "no approvals to resolve");
+            return Ok(());
+        }
+        let index = self
+            .state
+            .approval_index
+            .min(snapshot.summary.approvals.len().saturating_sub(1));
+        let approval = snapshot.summary.approvals[index].clone();
+        let mut recorder = mc_core::RunRecorder::open(
+            std::path::Path::new(&snapshot.summary.project_root),
+            &snapshot.summary.run_id,
+        )
+        .map_err(|error| TuiError::EventHandling(error.to_string()))?;
+        recorder
+            .emit(RunEvent::ApprovalResolved {
+                approval_id: approval.approval_id.clone(),
+                status: if approved {
+                    mc_core::ApprovalStatus::Approved
+                } else {
+                    mc_core::ApprovalStatus::Rejected
+                },
+                choice: Some(if approved { "approve" } else { "reject" }.to_string()),
+                comment: Some("resolved from tui".to_string()),
+            })
+            .map_err(|error| TuiError::EventHandling(error.to_string()))?;
+        self.state.load_run(recorder.snapshot().clone());
+        self.clamp_review_indices();
+        self.push_log(
+            LogLevel::Info,
+            format!(
+                "approval {} -> {}",
+                approval.title,
+                if approved { "approved" } else { "rejected" }
+            ),
+        );
+        Ok(())
+    }
+
+    fn resolve_current_patch(&mut self, accepted: bool) -> Result<(), TuiError> {
+        let Some(snapshot) = self.state.run_snapshot.clone() else {
+            return Ok(());
+        };
+        if snapshot.summary.patches.is_empty() {
+            self.push_log(LogLevel::Warn, "no patches to review");
+            return Ok(());
+        }
+        let index = self
+            .state
+            .patch_index
+            .min(snapshot.summary.patches.len().saturating_sub(1));
+        let patch = snapshot.summary.patches[index].clone();
+        let mut recorder = mc_core::RunRecorder::open(
+            std::path::Path::new(&snapshot.summary.project_root),
+            &snapshot.summary.run_id,
+        )
+        .map_err(|error| TuiError::EventHandling(error.to_string()))?;
+        recorder
+            .emit(RunEvent::PatchResolved {
+                patch_id: patch.patch_id.clone(),
+                hunk_id: None,
+                status: if accepted {
+                    mc_core::PatchStatus::Accepted
+                } else {
+                    mc_core::PatchStatus::Rejected
+                },
+            })
+            .map_err(|error| TuiError::EventHandling(error.to_string()))?;
+        self.state.load_run(recorder.snapshot().clone());
+        self.clamp_review_indices();
+        self.push_log(
+            LogLevel::Info,
+            format!(
+                "patch {} -> {}",
+                patch.file_path,
+                if accepted { "accepted" } else { "rejected" }
+            ),
+        );
+        Ok(())
+    }
+
+    fn clamp_review_indices(&mut self) {
+        if let Some(snapshot) = self.state.run_snapshot.as_ref() {
+            if snapshot.summary.approvals.is_empty() {
+                self.state.approval_index = 0;
+            } else {
+                self.state.approval_index = self
+                    .state
+                    .approval_index
+                    .min(snapshot.summary.approvals.len() - 1);
             }
-            3 => {
-                self.state.mouse_support = !self.state.mouse_support;
+            if snapshot.summary.patches.is_empty() {
+                self.state.patch_index = 0;
+            } else {
+                self.state.patch_index = self
+                    .state
+                    .patch_index
+                    .min(snapshot.summary.patches.len() - 1);
             }
-            _ => {}
         }
     }
 
@@ -1098,6 +1536,8 @@ impl AppState {
             max_log_entries: DEFAULT_MAX_LOG_ENTRIES,
             mouse_support: false,
             settings_index: 0,
+            approval_index: 0,
+            patch_index: 0,
             title: title.into(),
             should_quit: false,
             terminal_size: (0, 0),
@@ -1113,6 +1553,8 @@ impl AppState {
             token_total: 0,
             token_history: VecDeque::from([0]),
             scroll_offsets,
+            run_snapshot: None,
+            settings_persist_path: None,
         }
     }
 
@@ -1159,6 +1601,10 @@ impl AppState {
         self.mouse_support = value;
     }
 
+    pub fn set_settings_persist_path(&mut self, value: PathBuf) {
+        self.settings_persist_path = Some(value);
+    }
+
     pub fn settings_index(&self) -> usize {
         self.settings_index
     }
@@ -1199,11 +1645,36 @@ impl AppState {
         &self.token_history
     }
 
+    pub fn run_snapshot(&self) -> Option<&RunSnapshot> {
+        self.run_snapshot.as_ref()
+    }
+
     pub fn scroll_offset(&self, panel: Panel) -> u16 {
         self.scroll_offsets.get(&panel).copied().unwrap_or(0)
     }
 
     pub fn overall_progress(&self) -> u8 {
+        if let Some(snapshot) = &self.run_snapshot {
+            let relevant = snapshot
+                .summary
+                .steps
+                .iter()
+                .filter(|step| step.parent_step_id.is_none())
+                .collect::<Vec<_>>();
+            if !relevant.is_empty() {
+                let done = relevant
+                    .iter()
+                    .filter(|step| {
+                        matches!(
+                            step.status,
+                            mc_core::StepStatus::Done | mc_core::StepStatus::Skipped
+                        )
+                    })
+                    .count();
+                return ((done * 100) / relevant.len()) as u8;
+            }
+        }
+
         let mut total = 0u64;
         let mut count = 0u64;
 
@@ -1269,10 +1740,40 @@ impl AppState {
     }
 
     pub fn pending_confirmation_count(&self) -> usize {
+        if let Some(snapshot) = &self.run_snapshot {
+            return snapshot
+                .summary
+                .approvals
+                .iter()
+                .filter(|entry| entry.status == mc_core::ApprovalStatus::Pending)
+                .count();
+        }
+
         self.confirmations
             .iter()
             .filter(|entry| entry.status == ConfirmationStatus::Pending)
             .count()
+    }
+
+    pub fn load_run(&mut self, snapshot: RunSnapshot) {
+        self.token_total = snapshot.summary.total_tokens;
+        self.token_history.clear();
+        self.token_history.push_back(snapshot.summary.total_tokens);
+        self.run_snapshot = Some(snapshot);
+        if let Some(snapshot) = self.run_snapshot.as_ref() {
+            if snapshot.summary.approvals.is_empty() {
+                self.approval_index = 0;
+            } else {
+                self.approval_index = self
+                    .approval_index
+                    .min(snapshot.summary.approvals.len() - 1);
+            }
+            if snapshot.summary.patches.is_empty() {
+                self.patch_index = 0;
+            } else {
+                self.patch_index = self.patch_index.min(snapshot.summary.patches.len() - 1);
+            }
+        }
     }
 }
 
@@ -1355,6 +1856,112 @@ pub(crate) fn join_or_dash(values: &[String]) -> String {
     } else {
         values.join(", ")
     }
+}
+
+fn run_snapshot_from_event(event: &RunEventEnvelope) -> RunSnapshot {
+    match &event.event {
+        RunEvent::RunStarted {
+            run_id,
+            session_id,
+            request,
+            project_root,
+        } => RunSnapshot::new(
+            run_id.clone(),
+            session_id.clone(),
+            request.clone(),
+            project_root.clone(),
+        ),
+        _ => RunSnapshot::new("live-run", "live-session", "", ""),
+    }
+}
+
+fn run_level_to_log(level: mc_core::MessageLevel) -> LogLevel {
+    match level {
+        mc_core::MessageLevel::Info => LogLevel::Info,
+        mc_core::MessageLevel::Warn => LogLevel::Warn,
+        mc_core::MessageLevel::Error => LogLevel::Error,
+    }
+}
+
+fn wrap_index(current: usize, len: usize, delta: i8) -> usize {
+    if len == 0 {
+        return 0;
+    }
+    if delta < 0 {
+        if current == 0 {
+            len - 1
+        } else {
+            current - 1
+        }
+    } else {
+        (current + 1) % len
+    }
+}
+
+fn contains(area: Rect, column: u16, row: u16) -> bool {
+    column >= area.x
+        && column < area.x.saturating_add(area.width)
+        && row >= area.y
+        && row < area.y.saturating_add(area.height)
+}
+
+fn proportional_index(column: u16, x: u16, width: u16, count: usize) -> Option<usize> {
+    if width == 0 || count == 0 || column < x || column >= x.saturating_add(width) {
+        return None;
+    }
+    let relative = column.saturating_sub(x) as usize;
+    Some((relative * count / width as usize).min(count - 1))
+}
+
+fn persist_tui_settings(
+    path: &PathBuf,
+    language: Language,
+    tick_rate_ms: u64,
+    max_log_entries: usize,
+    mouse_support: bool,
+    theme_name: &str,
+) -> Result<(), String> {
+    let mut root = if path.exists() {
+        let contents = std::fs::read_to_string(path).map_err(|error| error.to_string())?;
+        toml::from_str::<Value>(&contents).map_err(|error| error.to_string())?
+    } else {
+        Value::Table(toml::map::Map::new())
+    };
+
+    let root_table = root
+        .as_table_mut()
+        .ok_or_else(|| "config root must be a TOML table".to_string())?;
+    let tui_value = root_table
+        .entry("tui".to_string())
+        .or_insert_with(|| Value::Table(toml::map::Map::new()));
+    let tui_table = tui_value
+        .as_table_mut()
+        .ok_or_else(|| "[tui] must be a TOML table".to_string())?;
+
+    tui_table.insert("theme".to_string(), Value::String(theme_name.to_string()));
+    tui_table.insert(
+        "language".to_string(),
+        Value::String(match language {
+            Language::En => "en".to_string(),
+            Language::ZhCn => "zh-cn".to_string(),
+        }),
+    );
+    tui_table.insert("mouse_support".to_string(), Value::Boolean(mouse_support));
+    tui_table.insert(
+        "max_log_lines".to_string(),
+        Value::Integer(max_log_entries as i64),
+    );
+    tui_table.insert(
+        "refresh_rate_ms".to_string(),
+        Value::Integer(tick_rate_ms as i64),
+    );
+
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+    }
+
+    let contents = toml::to_string_pretty(&root).map_err(|error| error.to_string())?;
+    std::fs::write(path, contents).map_err(|error| error.to_string())
 }
 
 fn seed_default_topology() -> Vec<CommunicationEdge> {

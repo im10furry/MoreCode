@@ -18,6 +18,10 @@ pub fn render(frame: &mut Frame, area: Rect, state: &AppState, theme: TuiTheme) 
         Line::from(text(lang, TextKey::HelpOpenSettings)),
         Line::from(text(lang, TextKey::HelpOpenHelp)),
         Line::from(text(lang, TextKey::HelpQuit)),
+        Line::from("n / p: next/previous approval or patch"),
+        Line::from("a / r: approve or reject selected approval"),
+        Line::from("x / d: accept or reject selected patch"),
+        Line::from("mouse: click tabs/settings, wheel scroll, click selected rows to act"),
         Line::from(format!(
             "{} {}",
             text(lang, TextKey::HelpActivePanel),

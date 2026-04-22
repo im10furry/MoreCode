@@ -1,8 +1,13 @@
 pub mod config;
 pub mod daemon;
 pub mod doctor;
+pub mod export;
 pub mod memory;
 pub mod othercli;
+pub mod replay;
+pub mod review;
 pub mod run;
 pub mod taskpile;
 pub mod tui;
+pub mod web;
+pub mod workflow;

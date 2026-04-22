@@ -1,7 +1,8 @@
-use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseEvent};
 use mc_communication::{
     ApprovalRequest, ApprovalResponse, BroadcastEvent, ControlMessage, StateMessage,
 };
+use mc_core::RunEventEnvelope;
 
 use crate::app::StreamMode;
 
@@ -20,6 +21,12 @@ pub enum KeyAction {
     SettingInc,
     SettingDec,
     ToggleSetting,
+    NextItem,
+    PreviousItem,
+    Approve,
+    Reject,
+    AcceptPatch,
+    RejectPatch,
     Help,
     Quit,
 }
@@ -50,6 +57,12 @@ impl KeyAction {
             (KeyCode::Char('+'), _) | (KeyCode::Char('='), _) => Some(Self::SettingInc),
             (KeyCode::Char('-'), _) => Some(Self::SettingDec),
             (KeyCode::Enter, _) => Some(Self::ToggleSetting),
+            (KeyCode::Char('n'), _) => Some(Self::NextItem),
+            (KeyCode::Char('p'), _) => Some(Self::PreviousItem),
+            (KeyCode::Char('a'), _) => Some(Self::Approve),
+            (KeyCode::Char('r'), _) => Some(Self::Reject),
+            (KeyCode::Char('x'), _) => Some(Self::AcceptPatch),
+            (KeyCode::Char('d'), _) => Some(Self::RejectPatch),
             (KeyCode::Char('?'), _) | (KeyCode::F(1), _) => Some(Self::Help),
             (KeyCode::Esc, _)
             | (KeyCode::Char('q'), _)
@@ -88,6 +101,7 @@ pub enum TuiUpdate {
     Broadcast(BroadcastEvent),
     ApprovalRequest(ApprovalRequest),
     ApprovalResponse(ApprovalResponse),
+    RunEvent(RunEventEnvelope),
     Log { level: LogLevel, message: String },
 }
 
@@ -97,6 +111,7 @@ pub enum AppEvent {
     Tick,
     Resize { width: u16, height: u16 },
     Key(KeyAction),
+    Mouse(MouseEvent),
     Update(Box<TuiUpdate>),
 }
 
@@ -105,6 +120,7 @@ impl AppEvent {
     pub fn from_crossterm(event: Event) -> Option<Self> {
         match event {
             Event::Key(key) => KeyAction::from_crossterm(key).map(Self::Key),
+            Event::Mouse(mouse) => Some(Self::Mouse(mouse)),
             Event::Resize(width, height) => Some(Self::Resize { width, height }),
             _ => None,
         }

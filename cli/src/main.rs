@@ -19,8 +19,12 @@ async fn main() {
     };
 
     let result = match &cli.command {
-        Command::Run { request } => command::run::execute(&context, request).await,
-        Command::Tui { request } => command::tui::execute(&context, request.as_deref()).await,
+        Command::Run(command) => command::run::execute(&context, command).await,
+        Command::Review(command) => command::review::execute(&context, command).await,
+        Command::Replay(command) => command::replay::execute(&context, command).await,
+        Command::Export(command) => command::export::execute(&context, command).await,
+        Command::Tui(command) => command::tui::execute(&context, command).await,
+        Command::Web(command) => command::web::execute(&context, command).await,
         Command::Memory(memory_command) => command::memory::execute(&context, memory_command).await,
         Command::Config(config_command) => command::config::execute(&context, config_command).await,
         Command::Doctor => command::doctor::execute(&context).await,
@@ -31,7 +35,9 @@ async fn main() {
 
     match result {
         Ok(output) => {
-            println!("{output}");
+            if !output.is_empty() {
+                println!("{output}");
+            }
         }
         Err(error) => {
             eprintln!("{error}");

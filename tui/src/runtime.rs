@@ -2,7 +2,7 @@ use std::fmt;
 use std::io::stdout;
 use std::time::Duration;
 
-use crossterm::event::EventStream;
+use crossterm::event::{DisableMouseCapture, EnableMouseCapture, EventStream};
 use crossterm::execute;
 use crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
@@ -11,6 +11,7 @@ use futures_util::StreamExt;
 use mc_communication::{
     ApprovalRequest, ApprovalResponse, BroadcastEvent, ControlMessage, StateMessage,
 };
+use mc_core::RunEventEnvelope;
 use ratatui::backend::{Backend, CrosstermBackend};
 use ratatui::Terminal;
 use tokio::sync::mpsc;
@@ -90,6 +91,8 @@ impl Tui {
         let backend = CrosstermBackend::new(stdout());
         let mut terminal = Terminal::new(backend)?;
         terminal.clear()?;
+        self.app.state_mut().terminal_size = (terminal.size()?.width, terminal.size()?.height);
+        set_mouse_capture_enabled(self.app.state().mouse_support())?;
 
         let result = self.run_loop(&mut terminal).await;
         terminal.show_cursor()?;
@@ -102,6 +105,7 @@ impl Tui {
     {
         let mut events = EventStream::new();
         let mut tick_rate_ms = self.app.state().tick_rate_ms();
+        let mut mouse_support = self.app.state().mouse_support();
         self.tick_rate = Duration::from_millis(tick_rate_ms.max(16));
         let mut ticks = time::interval(self.tick_rate);
         ticks.set_missed_tick_behavior(MissedTickBehavior::Skip);
@@ -140,6 +144,12 @@ impl Tui {
                 self.tick_rate = Duration::from_millis(tick_rate_ms.max(16));
                 ticks = time::interval(self.tick_rate);
                 ticks.set_missed_tick_behavior(MissedTickBehavior::Skip);
+            }
+
+            let desired_mouse_support = self.app.state().mouse_support();
+            if desired_mouse_support != mouse_support {
+                mouse_support = desired_mouse_support;
+                set_mouse_capture_enabled(mouse_support)?;
             }
 
             if self.app.state().should_quit() {
@@ -184,6 +194,10 @@ impl TuiHandle {
             message: message.into(),
         })
     }
+
+    pub fn run_event(&self, event: RunEventEnvelope) -> Result<(), TuiError> {
+        self.send(TuiUpdate::RunEvent(event))
+    }
 }
 
 #[derive(Debug)]
@@ -200,6 +214,15 @@ impl TerminalGuard {
 impl Drop for TerminalGuard {
     fn drop(&mut self) {
         let _ = disable_raw_mode();
-        let _ = execute!(stdout(), LeaveAlternateScreen);
+        let _ = execute!(stdout(), DisableMouseCapture, LeaveAlternateScreen);
     }
+}
+
+fn set_mouse_capture_enabled(enabled: bool) -> Result<(), TuiError> {
+    if enabled {
+        execute!(stdout(), EnableMouseCapture)?;
+    } else {
+        execute!(stdout(), DisableMouseCapture)?;
+    }
+    Ok(())
 }

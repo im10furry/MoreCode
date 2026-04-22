@@ -24,12 +24,7 @@ fn yes_no(lang: Language, value: bool) -> &'static str {
     }
 }
 
-fn row(
-    selected: bool,
-    theme: TuiTheme,
-    label: &'static str,
-    value: String,
-) -> Line<'static> {
+fn row(selected: bool, theme: TuiTheme, label: &'static str, value: String) -> Line<'static> {
     let value_span = if selected {
         Span::styled(value, theme.accent().add_modifier(Modifier::BOLD))
     } else {
@@ -93,4 +88,3 @@ pub fn render(frame: &mut Frame, area: Rect, state: &AppState, theme: TuiTheme) 
         .wrap(Wrap { trim: false });
     frame.render_widget(paragraph, area);
 }
-

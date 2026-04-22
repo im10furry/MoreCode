@@ -213,8 +213,9 @@ pub const fn text(lang: Language, key: TextKey) -> &'static str {
             TextKey::SettingsItemMaxLogs => "Max log lines",
             TextKey::SettingsItemMouse => "Mouse support",
             TextKey::SettingsItemTheme => "Theme",
-            TextKey::SettingsPersistHint =>
-                "Persist by editing ~/.config/morecode/config.toml or .morecode/config.toml",
+            TextKey::SettingsPersistHint => {
+                "Changes are saved to .morecode/config.toml automatically"
+            }
         },
         Language::ZhCn => match key {
             TextKey::PanelDashboard => "概览",
@@ -307,8 +308,9 @@ pub const fn text(lang: Language, key: TextKey) -> &'static str {
             TextKey::SettingsItemMaxLogs => "日志行上限",
             TextKey::SettingsItemMouse => "鼠标支持",
             TextKey::SettingsItemTheme => "主题",
-            TextKey::SettingsPersistHint =>
-                "持久化请编辑 ~/.config/morecode/config.toml 或 .morecode/config.toml",
+            TextKey::SettingsPersistHint => {
+                "持久化请编辑 ~/.config/morecode/config.toml 或 .morecode/config.toml"
+            }
         },
     }
 }

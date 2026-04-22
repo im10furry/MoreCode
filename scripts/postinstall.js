@@ -19,7 +19,7 @@ if (process.env.MORECODE_SKIP_BUILD === "1") {
 
 const build = spawnSync(
   cargoBinary,
-  ["build", "--release", "--locked", "-p", "cli", "--bin", "morecode"],
+  ["build", "--release", "-p", "cli", "--bin", "morecode"],
   {
     cwd: rootDir,
     stdio: "inherit",

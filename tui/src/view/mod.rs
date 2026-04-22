@@ -3,6 +3,7 @@ pub mod communication;
 pub mod dashboard;
 pub mod help;
 pub mod log;
+pub mod settings;
 pub mod task_progress;
 pub mod token_usage;
 
@@ -20,6 +21,7 @@ pub fn render_active_panel(frame: &mut Frame, area: Rect, state: &AppState, them
         Panel::Communication => communication::render(frame, area, state, theme),
         Panel::TokenUsage => token_usage::render(frame, area, state, theme),
         Panel::Log => log::render(frame, area, state, theme),
+        Panel::Settings => settings::render(frame, area, state, theme),
         Panel::Help => help::render(frame, area, state, theme),
     }
 }

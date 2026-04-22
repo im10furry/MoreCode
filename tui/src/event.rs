@@ -16,6 +16,10 @@ pub enum KeyAction {
     ScrollUp,
     ScrollDown,
     ToggleLanguage,
+    Settings,
+    SettingInc,
+    SettingDec,
+    ToggleSetting,
     Help,
     Quit,
 }
@@ -42,6 +46,10 @@ impl KeyAction {
             (KeyCode::Up, _) | (KeyCode::Char('k'), _) => Some(Self::ScrollUp),
             (KeyCode::Down, _) | (KeyCode::Char('j'), _) => Some(Self::ScrollDown),
             (KeyCode::Char('t'), _) => Some(Self::ToggleLanguage),
+            (KeyCode::Char('s'), _) => Some(Self::Settings),
+            (KeyCode::Char('+'), _) | (KeyCode::Char('='), _) => Some(Self::SettingInc),
+            (KeyCode::Char('-'), _) => Some(Self::SettingDec),
+            (KeyCode::Enter, _) => Some(Self::ToggleSetting),
             (KeyCode::Char('?'), _) | (KeyCode::F(1), _) => Some(Self::Help),
             (KeyCode::Esc, _)
             | (KeyCode::Char('q'), _)

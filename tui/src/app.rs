@@ -18,10 +18,11 @@ use crate::i18n::{text, Language, TextKey};
 use crate::theme::TuiTheme;
 use crate::view;
 
-const MAX_LOG_ENTRIES: usize = 200;
 const MAX_CODE_STREAM_ENTRIES: usize = 80;
 const MAX_CONFIRMATIONS: usize = 32;
 const MAX_TOKEN_HISTORY: usize = 120;
+const DEFAULT_MAX_LOG_ENTRIES: usize = 200;
+const DEFAULT_TICK_RATE_MS: u64 = 250;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Panel {
@@ -31,17 +32,19 @@ pub enum Panel {
     Communication,
     TokenUsage,
     Log,
+    Settings,
     Help,
 }
 
 impl Panel {
-    pub const ALL: [Self; 7] = [
+    pub const ALL: [Self; 8] = [
         Self::Dashboard,
         Self::AgentStatus,
         Self::TaskProgress,
         Self::Communication,
         Self::TokenUsage,
         Self::Log,
+        Self::Settings,
         Self::Help,
     ];
 
@@ -53,6 +56,7 @@ impl Panel {
             Self::Communication => text(lang, TextKey::PanelTopology),
             Self::TokenUsage => text(lang, TextKey::PanelTokens),
             Self::Log => text(lang, TextKey::PanelLogs),
+            Self::Settings => text(lang, TextKey::PanelSettings),
             Self::Help => text(lang, TextKey::PanelHelp),
         }
     }
@@ -239,6 +243,10 @@ pub struct AppState {
     pub(crate) active_panel: Panel,
     pub(crate) stream_mode: StreamMode,
     pub(crate) language: Language,
+    pub(crate) tick_rate_ms: u64,
+    pub(crate) max_log_entries: usize,
+    pub(crate) mouse_support: bool,
+    pub(crate) settings_index: usize,
     pub(crate) title: String,
     pub(crate) should_quit: bool,
     pub(crate) terminal_size: (u16, u16),
@@ -312,16 +320,40 @@ impl App {
                 Ok(())
             }
             AppEvent::Key(KeyAction::ScrollUp) => {
-                self.adjust_scroll(-1);
+                if self.state.active_panel == Panel::Settings {
+                    self.settings_select_prev();
+                } else {
+                    self.adjust_scroll(-1);
+                }
                 Ok(())
             }
             AppEvent::Key(KeyAction::ScrollDown) => {
-                self.adjust_scroll(1);
+                if self.state.active_panel == Panel::Settings {
+                    self.settings_select_next();
+                } else {
+                    self.adjust_scroll(1);
+                }
                 Ok(())
             }
             AppEvent::Key(KeyAction::ToggleLanguage) => {
                 self.state.language = self.state.language.toggle();
                 self.push_log(LogLevel::Info, format!("language: {:?}", self.state.language));
+                Ok(())
+            }
+            AppEvent::Key(KeyAction::Settings) => {
+                self.state.active_panel = Panel::Settings;
+                Ok(())
+            }
+            AppEvent::Key(KeyAction::SettingInc) => {
+                self.apply_setting_delta(1);
+                Ok(())
+            }
+            AppEvent::Key(KeyAction::SettingDec) => {
+                self.apply_setting_delta(-1);
+                Ok(())
+            }
+            AppEvent::Key(KeyAction::ToggleSetting) => {
+                self.apply_setting_toggle();
                 Ok(())
             }
             AppEvent::Key(KeyAction::Help) => {
@@ -898,6 +930,70 @@ impl App {
         }
     }
 
+    fn settings_len(&self) -> usize {
+        5
+    }
+
+    fn settings_select_prev(&mut self) {
+        if self.state.settings_index == 0 {
+            self.state.settings_index = self.settings_len().saturating_sub(1);
+        } else {
+            self.state.settings_index = self.state.settings_index.saturating_sub(1);
+        }
+    }
+
+    fn settings_select_next(&mut self) {
+        let len = self.settings_len();
+        if len == 0 {
+            self.state.settings_index = 0;
+            return;
+        }
+        self.state.settings_index = (self.state.settings_index + 1) % len;
+    }
+
+    fn apply_setting_delta(&mut self, direction: i8) {
+        match self.state.settings_index {
+            0 => {
+                if direction != 0 {
+                    self.state.language = self.state.language.toggle();
+                }
+            }
+            1 => {
+                let step = 50u64;
+                if direction > 0 {
+                    self.state.tick_rate_ms = self.state.tick_rate_ms.saturating_add(step);
+                } else {
+                    self.state.tick_rate_ms = self.state.tick_rate_ms.saturating_sub(step).max(16);
+                }
+            }
+            2 => {
+                let step = 50usize;
+                if direction > 0 {
+                    self.state.set_max_log_entries(self.state.max_log_entries.saturating_add(step));
+                } else {
+                    self.state
+                        .set_max_log_entries(self.state.max_log_entries.saturating_sub(step).max(10));
+                }
+            }
+            3 => {
+                self.state.mouse_support = !self.state.mouse_support;
+            }
+            _ => {}
+        }
+    }
+
+    fn apply_setting_toggle(&mut self) {
+        match self.state.settings_index {
+            0 => {
+                self.state.language = self.state.language.toggle();
+            }
+            3 => {
+                self.state.mouse_support = !self.state.mouse_support;
+            }
+            _ => {}
+        }
+    }
+
     fn agent_mut(&mut self, agent_type: AgentType) -> Result<&mut AgentSnapshot, TuiError> {
         self.state
             .agents
@@ -969,7 +1065,8 @@ impl App {
     }
 
     fn push_log(&mut self, level: LogLevel, message: impl Into<String>) {
-        if self.state.logs.len() >= MAX_LOG_ENTRIES {
+        let max_entries = self.state.max_log_entries.max(1);
+        while self.state.logs.len() >= max_entries {
             self.state.logs.pop_front();
         }
         self.state.logs.push_back(UiLogEntry {
@@ -997,6 +1094,10 @@ impl AppState {
             active_panel: Panel::Dashboard,
             stream_mode: StreamMode::Progress,
             language: Language::detect(),
+            tick_rate_ms: DEFAULT_TICK_RATE_MS,
+            max_log_entries: DEFAULT_MAX_LOG_ENTRIES,
+            mouse_support: false,
+            settings_index: 0,
             title: title.into(),
             should_quit: false,
             terminal_size: (0, 0),
@@ -1025,6 +1126,41 @@ impl AppState {
 
     pub fn language(&self) -> Language {
         self.language
+    }
+
+    pub fn set_language(&mut self, value: Language) {
+        self.language = value;
+    }
+
+    pub fn tick_rate_ms(&self) -> u64 {
+        self.tick_rate_ms
+    }
+
+    pub fn set_tick_rate_ms(&mut self, value: u64) {
+        self.tick_rate_ms = value.max(16);
+    }
+
+    pub fn max_log_entries(&self) -> usize {
+        self.max_log_entries
+    }
+
+    pub fn set_max_log_entries(&mut self, value: usize) {
+        self.max_log_entries = value.max(1);
+        while self.logs.len() > self.max_log_entries {
+            self.logs.pop_front();
+        }
+    }
+
+    pub fn mouse_support(&self) -> bool {
+        self.mouse_support
+    }
+
+    pub fn set_mouse_support(&mut self, value: bool) {
+        self.mouse_support = value;
+    }
+
+    pub fn settings_index(&self) -> usize {
+        self.settings_index
     }
 
     pub fn should_quit(&self) -> bool {

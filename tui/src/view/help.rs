@@ -15,6 +15,7 @@ pub fn render(frame: &mut Frame, area: Rect, state: &AppState, theme: TuiTheme) 
         Line::from(text(lang, TextKey::HelpCycleMode)),
         Line::from(text(lang, TextKey::HelpScroll)),
         Line::from(text(lang, TextKey::HelpToggleLanguage)),
+        Line::from(text(lang, TextKey::HelpOpenSettings)),
         Line::from(text(lang, TextKey::HelpOpenHelp)),
         Line::from(text(lang, TextKey::HelpQuit)),
         Line::from(format!(

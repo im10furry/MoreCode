@@ -210,7 +210,7 @@ impl ConfigLoader {
                 reason: error.to_string(),
             })?;
 
-        toml::from_str::<PartialAppConfig>(&contents).map_err(|error| ConfigError::ParseFailed {
+        parse_partial_app_config(&contents).map_err(|error| ConfigError::ParseFailed {
             path: config_path.display().to_string(),
             reason: error.to_string(),
         })
@@ -489,6 +489,130 @@ impl ConfigLoader {
         }
         roots
     }
+}
+
+pub fn parse_partial_app_config(
+    contents: &str,
+) -> std::result::Result<PartialAppConfig, toml::de::Error> {
+    let mut value = toml::from_str::<toml::Value>(contents)?;
+    migrate_legacy_provider_config(&mut value);
+    value.try_into()
+}
+
+fn migrate_legacy_provider_config(value: &mut toml::Value) {
+    let Some(root) = value.as_table_mut() else {
+        return;
+    };
+    let Some(provider) = root.get_mut("provider").and_then(toml::Value::as_table_mut) else {
+        return;
+    };
+
+    let known_keys = [
+        "default_provider",
+        "providers",
+        "semantic_cache_enabled",
+        "semantic_cache_threshold",
+        "precise_token_count",
+    ];
+
+    let mut providers_table = match provider.remove("providers") {
+        Some(toml::Value::Table(table)) => table,
+        Some(other) => {
+            provider.insert("providers".to_string(), other);
+            return;
+        }
+        None => toml::value::Table::new(),
+    };
+
+    let keys = provider.keys().cloned().collect::<Vec<_>>();
+    let mut migrated_names = Vec::new();
+
+    for key in keys {
+        if known_keys.contains(&key.as_str()) {
+            continue;
+        }
+        let is_legacy_table = provider
+            .get(&key)
+            .is_some_and(|value| matches!(value, toml::Value::Table(_)));
+        if !is_legacy_table {
+            continue;
+        }
+        if providers_table.contains_key(&key) {
+            let _ = provider.remove(&key);
+            continue;
+        }
+        if let Some(entry) = provider.remove(&key) {
+            providers_table.insert(key.clone(), entry);
+            migrated_names.push(key);
+        }
+    }
+
+    if provider.get("default_provider").is_none() {
+        if providers_table.len() == 1 {
+            if let Some((name, _)) = providers_table.iter().next() {
+                provider.insert("default_provider".to_string(), toml::Value::String(name.clone()));
+            }
+        } else if migrated_names.len() == 1 {
+            provider.insert(
+                "default_provider".to_string(),
+                toml::Value::String(migrated_names[0].clone()),
+            );
+        }
+    }
+
+    for (_, entry_value) in providers_table.iter_mut() {
+        let Some(entry) = entry_value.as_table_mut() else {
+            continue;
+        };
+        migrate_provider_entry_table(entry);
+    }
+
+    provider.insert("providers".to_string(), toml::Value::Table(providers_table));
+}
+
+fn migrate_provider_entry_table(entry: &mut toml::value::Table) {
+    let api_key_exists = entry.get("api_key").and_then(toml::Value::as_str).is_some();
+    let api_key_env = entry
+        .get("api_key_env")
+        .and_then(toml::Value::as_str)
+        .map(str::to_string);
+
+    if api_key_exists {
+        return;
+    }
+
+    let Some(api_key_env) = api_key_env else {
+        return;
+    };
+
+    if looks_like_env_name(&api_key_env) && !looks_like_misplaced_api_key(&api_key_env) {
+        return;
+    }
+
+    entry.insert("api_key".to_string(), toml::Value::String(api_key_env));
+    entry.remove("api_key_env");
+}
+
+fn looks_like_env_name(value: &str) -> bool {
+    let mut chars = value.chars();
+    let Some(first) = chars.next() else {
+        return false;
+    };
+    if !(first.is_ascii_alphabetic() || first == '_') {
+        return false;
+    }
+    chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
+}
+
+fn looks_like_misplaced_api_key(value: &str) -> bool {
+    let (prefix, rest) = value.split_once('_').unwrap_or(("", value));
+    if prefix.is_empty() || prefix.len() > 6 {
+        return false;
+    }
+    if rest.len() < 24 {
+        return false;
+    }
+    rest.chars().all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase())
 }
 
 impl Drop for ConfigLoader {

@@ -4,6 +4,8 @@ use serde::{Deserialize, Serialize};
 pub struct TuiConfig {
     #[serde(default = "default_theme")]
     pub theme: String,
+    #[serde(default = "default_language")]
+    pub language: String,
     #[serde(default)]
     pub mouse_support: bool,
     #[serde(default = "default_max_log_lines")]
@@ -18,6 +20,7 @@ impl Default for TuiConfig {
     fn default() -> Self {
         Self {
             theme: default_theme(),
+            language: default_language(),
             mouse_support: false,
             max_log_lines: default_max_log_lines(),
             refresh_rate_ms: default_refresh_rate_ms(),
@@ -30,6 +33,7 @@ impl Default for TuiConfig {
 #[serde(default)]
 pub struct PartialTuiConfig {
     pub theme: Option<String>,
+    pub language: Option<String>,
     pub mouse_support: Option<bool>,
     pub max_log_lines: Option<usize>,
     pub refresh_rate_ms: Option<u64>,
@@ -40,6 +44,9 @@ impl TuiConfig {
     pub(crate) fn apply_partial(&mut self, partial: PartialTuiConfig) {
         if let Some(value) = partial.theme {
             self.theme = value;
+        }
+        if let Some(value) = partial.language {
+            self.language = value;
         }
         if let Some(value) = partial.mouse_support {
             self.mouse_support = value;
@@ -60,6 +67,7 @@ impl PartialTuiConfig {
     pub(crate) fn merge(self, other: Self) -> Self {
         Self {
             theme: other.theme.or(self.theme),
+            language: other.language.or(self.language),
             mouse_support: other.mouse_support.or(self.mouse_support),
             max_log_lines: other.max_log_lines.or(self.max_log_lines),
             refresh_rate_ms: other.refresh_rate_ms.or(self.refresh_rate_ms),
@@ -70,6 +78,10 @@ impl PartialTuiConfig {
 
 fn default_theme() -> String {
     "dark".to_string()
+}
+
+fn default_language() -> String {
+    "auto".to_string()
 }
 
 fn default_max_log_lines() -> usize {

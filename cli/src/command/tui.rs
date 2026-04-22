@@ -11,7 +11,7 @@ use mc_llm::{
     AnthropicProvider, AnthropicProviderConfig, GoogleProvider, GoogleProviderConfig, LlmProvider,
     ModelInfo, OpenAiProvider, OpenAiProviderConfig,
 };
-use mc_tui::{LogLevel, Tui, TuiHandle};
+use mc_tui::{Language, LogLevel, Tui, TuiHandle};
 use tokio::task::JoinHandle;
 use tokio::time::{interval, Duration};
 use tokio_util::sync::CancellationToken;
@@ -22,6 +22,18 @@ pub async fn execute(context: &AppContext, request: Option<&str>) -> Result<Stri
     let (tui, handle) = Tui::new("MoreCode TUI");
     let mut tui = tui;
     tui.set_tick_rate(Duration::from_millis(context.config.tui.refresh_rate_ms.max(16)));
+    {
+        let state = tui.app_mut().state_mut();
+        let language = context.config.tui.language.trim().to_ascii_lowercase();
+        match language.as_str() {
+            "zh" | "zh-cn" | "zh_cn" => state.set_language(Language::ZhCn),
+            "en" | "en-us" | "en_us" => state.set_language(Language::En),
+            _ => {}
+        }
+        state.set_tick_rate_ms(context.config.tui.refresh_rate_ms);
+        state.set_max_log_entries(context.config.tui.max_log_lines);
+        state.set_mouse_support(context.config.tui.mouse_support);
+    }
 
     let cancel = CancellationToken::new();
     let worker = match request.map(str::trim).filter(|value| !value.is_empty()) {
@@ -61,10 +73,10 @@ fn spawn_coordinator_job(
         let task_id = format!("run-{}", uuid::Uuid::new_v4());
         let _ = handle.log(LogLevel::Info, format!("request: {request}"));
 
-        let resolved = match config.provider.resolve_default_provider() {
-            Some(resolved) => resolved,
-            None => {
-                let _ = handle.log(LogLevel::Error, "provider: cannot resolve default provider");
+        let resolved = match resolve_default_provider_for_tui(&config.provider) {
+            Ok(resolved) => resolved,
+            Err(error) => {
+                let _ = handle.log(LogLevel::Error, format!("provider: {error}"));
                 return;
             }
         };
@@ -278,9 +290,6 @@ fn build_llm_provider(
     resolved: ResolvedProviderEntry,
 ) -> Result<Arc<dyn LlmProvider>, String> {
     let provider_type = resolved.provider_type.as_str();
-    if provider_type == "mock" {
-        return Err("mock provider is not supported for TUI execution".to_string());
-    }
 
     let base_url = resolved
         .base_url
@@ -335,5 +344,54 @@ fn build_llm_provider(
             Ok(Arc::new(provider))
         }
         other => Err(format!("unsupported provider_type: {other}")),
+    }
+}
+
+fn resolve_default_provider_for_tui(
+    config: &mc_config::ProviderConfig,
+) -> Result<ResolvedProviderEntry, String> {
+    let default_provider = config.default_provider.trim();
+    let resolved = config.resolve_default_provider().ok_or_else(|| {
+        let names = config.provider_names();
+        if names.is_empty() {
+            format!("cannot resolve default provider: {default_provider}")
+        } else {
+            format!(
+                "cannot resolve default provider: {default_provider} (configured providers: {})",
+                names.join(", ")
+            )
+        }
+    })?;
+
+    if resolved.provider_type == "mock" {
+        return Err(format!(
+            "mock provider is not supported for TUI execution (provider.default_provider = '{}')",
+            resolved.name
+        ));
+    }
+
+    Ok(resolved)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::resolve_default_provider_for_tui;
+    use mc_config::ProviderConfig;
+
+    #[test]
+    fn rejects_mock_default_provider() {
+        let mut config = ProviderConfig::default();
+        config.default_provider = "mock".to_string();
+        let error = resolve_default_provider_for_tui(&config).unwrap_err();
+        assert!(error.contains("mock provider is not supported"));
+    }
+
+    #[test]
+    fn rejects_unresolvable_default_provider() {
+        let mut config = ProviderConfig::default();
+        config.default_provider = "does-not-exist".to_string();
+        let error = resolve_default_provider_for_tui(&config).unwrap_err();
+        assert!(error.contains("cannot resolve default provider"));
+        assert!(error.contains("does-not-exist"));
     }
 }

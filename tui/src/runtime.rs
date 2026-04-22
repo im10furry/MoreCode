@@ -101,6 +101,8 @@ impl Tui {
         B: Backend,
     {
         let mut events = EventStream::new();
+        let mut tick_rate_ms = self.app.state().tick_rate_ms();
+        self.tick_rate = Duration::from_millis(tick_rate_ms.max(16));
         let mut ticks = time::interval(self.tick_rate);
         ticks.set_missed_tick_behavior(MissedTickBehavior::Skip);
 
@@ -130,6 +132,14 @@ impl Tui {
                         None => break,
                     }
                 }
+            }
+
+            let desired = self.app.state().tick_rate_ms();
+            if desired != tick_rate_ms {
+                tick_rate_ms = desired;
+                self.tick_rate = Duration::from_millis(tick_rate_ms.max(16));
+                ticks = time::interval(self.tick_rate);
+                ticks.set_missed_tick_behavior(MissedTickBehavior::Skip);
             }
 
             if self.app.state().should_quit() {

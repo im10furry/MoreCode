@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     collections::HashSet,
     io::{self, Write},
     path::{Path, PathBuf},
@@ -28,6 +29,7 @@ struct DetectedProvider {
     product: String,
     provider_type: String,
     api_key_present: bool,
+    api_key: Option<String>,
     api_key_env: Option<String>,
     base_url: Option<String>,
     default_model: Option<String>,
@@ -180,6 +182,7 @@ fn scan_env() -> (Vec<DetectedSource>, Vec<DetectedProvider>) {
                 product: spec.product.into(),
                 provider_type: spec.provider_type.into(),
                 api_key_present: present,
+            api_key: None,
                 api_key_env: used_env.or_else(|| Some(spec.canonical_api_key_env.into())),
                 base_url,
                 default_model,
@@ -198,22 +201,51 @@ async fn scan_user_files() -> (Vec<DetectedSource>, Vec<DetectedProvider>) {
     if let Some(home) = dirs::home_dir() {
         candidates.extend([
             home.join(".codex").join("config.json"),
+            home.join(".codex").join("auth.json"),
             home.join(".claude").join("config.json"),
+            home.join(".claude").join("auth.json"),
             home.join(".gemini").join("config.json"),
+            home.join(".gemini").join("auth.json"),
             home.join(".config").join("codex").join("config.json"),
+            home.join(".config").join("codex").join("auth.json"),
             home.join(".config").join("claude").join("config.json"),
             home.join(".config").join("claude").join("settings.json"),
+            home.join(".config").join("claude").join("auth.json"),
             home.join(".config").join("gemini").join("config.json"),
+            home.join(".config").join("gemini").join("auth.json"),
         ]);
     }
     if let Ok(appdata) = std::env::var("APPDATA") {
         let roaming = PathBuf::from(appdata);
         candidates.extend([
             roaming.join("codex").join("config.json"),
+            roaming.join("codex").join("auth.json"),
             roaming.join("claude").join("config.json"),
+            roaming.join("claude").join("auth.json"),
             roaming.join("gemini").join("config.json"),
+            roaming.join("gemini").join("auth.json"),
         ]);
     }
+
+    #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+    struct UserFileGroupKey {
+        product: String,
+        provider_type: String,
+        dir: PathBuf,
+    }
+
+    #[derive(Debug, Clone)]
+    struct UserFileGroup {
+        source_label: String,
+        product: String,
+        provider_type: String,
+        api_key: Option<String>,
+        api_key_env: Option<String>,
+        base_url: Option<String>,
+        default_model: Option<String>,
+    }
+
+    let mut groups: HashMap<UserFileGroupKey, UserFileGroup> = HashMap::new();
 
     for path in candidates {
         let Some(file_info) = read_small_file(&path, 256 * 1024).await else {
@@ -230,21 +262,60 @@ async fn scan_user_files() -> (Vec<DetectedSource>, Vec<DetectedProvider>) {
             continue;
         }
 
-        let api_key_env = extracted
-            .api_key_env
-            .or_else(|| canonical_api_key_env_for_provider(&provider_type).map(str::to_string));
+        let Some(dir) = path.parent().map(Path::to_path_buf) else {
+            continue;
+        };
+
+        let key = UserFileGroupKey {
+            product: product.clone(),
+            provider_type: provider_type.clone(),
+            dir,
+        };
+        let entry = groups.entry(key).or_insert_with(|| UserFileGroup {
+            source_label: path.display().to_string(),
+            product: product.clone(),
+            provider_type: provider_type.clone(),
+            api_key: None,
+            api_key_env: None,
+            base_url: None,
+            default_model: None,
+        });
+
+        if entry.api_key.is_none() {
+            entry.api_key = extracted.api_key;
+        }
+        if entry.api_key_env.is_none() {
+            entry.api_key_env = extracted.api_key_env;
+        }
+        if entry.base_url.is_none() {
+            entry.base_url = extracted.base_url;
+        }
+        if entry.default_model.is_none() {
+            entry.default_model = extracted.default_model;
+        }
+    }
+
+    for group in groups.into_values() {
+        let api_key_env = if group.api_key.is_some() {
+            None
+        } else {
+            group.api_key_env.or_else(|| {
+                canonical_api_key_env_for_provider(&group.provider_type).map(str::to_string)
+            })
+        };
 
         providers.push(DetectedProvider {
             source: DetectedSource {
                 kind: SourceKind::UserFile,
-                label: path.display().to_string(),
+                label: group.source_label,
             },
-            product,
-            provider_type,
-            api_key_present: extracted.api_key_present,
+            product: group.product,
+            provider_type: group.provider_type,
+            api_key_present: group.api_key.is_some() || api_key_env.is_some(),
+            api_key: group.api_key,
             api_key_env,
-            base_url: extracted.base_url,
-            default_model: extracted.default_model,
+            base_url: group.base_url,
+            default_model: group.default_model,
         });
     }
 
@@ -295,6 +366,7 @@ async fn scan_project_env_files(project_root: &Path) -> (Vec<DetectedSource>, Ve
             product: spec.product.into(),
             provider_type: spec.provider_type.into(),
             api_key_present: true,
+            api_key: None,
             api_key_env: Some(spec.canonical_api_key_env.into()),
             base_url: None,
             default_model: None,
@@ -306,6 +378,7 @@ async fn scan_project_env_files(project_root: &Path) -> (Vec<DetectedSource>, Ve
 
 struct ProviderHints {
     api_key_present: bool,
+    api_key: Option<String>,
     api_key_env: Option<String>,
     base_url: Option<String>,
     default_model: Option<String>,
@@ -313,7 +386,11 @@ struct ProviderHints {
 
 impl ProviderHints {
     fn any_present(&self) -> bool {
-        self.api_key_present || self.api_key_env.is_some() || self.base_url.is_some() || self.default_model.is_some()
+        self.api_key_present
+            || self.api_key.is_some()
+            || self.api_key_env.is_some()
+            || self.base_url.is_some()
+            || self.default_model.is_some()
     }
 }
 
@@ -323,6 +400,7 @@ fn extract_provider_hints(path: &Path, contents: &str) -> ProviderHints {
         "toml" => extract_from_toml(contents),
         _ => ProviderHints {
             api_key_present: false,
+            api_key: None,
             api_key_env: None,
             base_url: None,
             default_model: None,
@@ -336,6 +414,7 @@ fn extract_from_json(contents: &str) -> ProviderHints {
         Err(_) => {
             return ProviderHints {
                 api_key_present: false,
+                api_key: None,
                 api_key_env: None,
                 base_url: None,
                 default_model: None,
@@ -343,8 +422,8 @@ fn extract_from_json(contents: &str) -> ProviderHints {
         }
     };
 
-    let api_key_present = find_any_string_key(&value, &["api_key", "apikey", "apiKey", "key", "token"])
-        .is_some();
+    let api_key = find_any_string_key(&value, &["api_key", "apikey", "apiKey", "key", "token"]);
+    let api_key_present = api_key.is_some();
     let api_key_env =
         find_any_string_key(&value, &["api_key_env", "apiKeyEnv", "api_key_env_var", "key_env"]);
     let base_url = find_any_string_key(&value, &["base_url", "baseUrl", "api_base", "apiBaseUrl", "endpoint", "url"]);
@@ -352,6 +431,7 @@ fn extract_from_json(contents: &str) -> ProviderHints {
 
     ProviderHints {
         api_key_present,
+        api_key,
         api_key_env,
         base_url,
         default_model,
@@ -364,6 +444,7 @@ fn extract_from_toml(contents: &str) -> ProviderHints {
         Err(_) => {
             return ProviderHints {
                 api_key_present: false,
+                api_key: None,
                 api_key_env: None,
                 base_url: None,
                 default_model: None,
@@ -371,8 +452,8 @@ fn extract_from_toml(contents: &str) -> ProviderHints {
         }
     };
 
-    let api_key_present =
-        find_any_toml_string_key(&value, &["api_key", "apikey", "key", "token"]).is_some();
+    let api_key = find_any_toml_string_key(&value, &["api_key", "apikey", "key", "token"]);
+    let api_key_present = api_key.is_some();
     let api_key_env =
         find_any_toml_string_key(&value, &["api_key_env", "key_env", "api_key_env_var"]);
     let base_url = find_any_toml_string_key(&value, &["base_url", "api_base", "endpoint", "url"]);
@@ -380,6 +461,7 @@ fn extract_from_toml(contents: &str) -> ProviderHints {
 
     ProviderHints {
         api_key_present,
+        api_key,
         api_key_env,
         base_url,
         default_model,
@@ -628,7 +710,12 @@ fn render_provider_append_snippet(imports: &[(String, DetectedProvider)]) -> Str
                 escape_toml_string(base_url)
             ));
         }
-        if let Some(env) = provider.api_key_env.as_deref().filter(|v| !v.trim().is_empty()) {
+        if let Some(api_key) = provider.api_key.as_deref().filter(|v| !v.trim().is_empty()) {
+            out.push_str(&format!(
+                "api_key = \"{}\"\n",
+                escape_toml_string(api_key)
+            ));
+        } else if let Some(env) = provider.api_key_env.as_deref().filter(|v| !v.trim().is_empty()) {
             out.push_str(&format!(
                 "api_key_env = \"{}\"\n",
                 escape_toml_string(env)
@@ -799,6 +886,7 @@ mod tests {
                 product: "codex".into(),
                 provider_type: "openai-compat".into(),
                 api_key_present: true,
+                api_key: None,
                 api_key_env: Some("OPENAI_API_KEY".into()),
                 base_url: None,
                 default_model: None,

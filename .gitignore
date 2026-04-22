@@ -50,6 +50,10 @@ rustup.log
 /target-*/
 **/target-*/
 
+# Node modules
+node_modules/
+web-ui/node_modules/
+
 # Other files
 /设计文档
 /需求文档

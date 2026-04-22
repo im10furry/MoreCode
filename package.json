@@ -8,7 +8,8 @@
   },
   "scripts": {
     "postinstall": "node ./scripts/postinstall.js",
-    "build:native": "node ./scripts/postinstall.js"
+    "build:native": "node ./scripts/postinstall.js",
+    "build:web": "cd web-ui && npm run build"
   },
   "engines": {
     "node": ">=18"
@@ -33,6 +34,7 @@
     "scripts",
     "tool",
     "tui",
+    "web-ui/dist",
     "Cargo.lock",
     "Cargo.toml",
     "LICENSE",

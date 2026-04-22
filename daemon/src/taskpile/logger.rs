@@ -1,5 +1,5 @@
 use std::sync::OnceLock;
-use tracing::{info, warn, error, debug};
+use tracing::{error, info};
 use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt};
 
 static LOGGER_INITIALIZED: OnceLock<()> = OnceLock::new();
@@ -48,16 +48,4 @@ pub fn log_task_resume(task_id: &str, title: &str) {
 
 pub fn log_task_cancel(task_id: &str, title: &str) {
     info!(task_id = task_id, title = title, "Task cancelled");
-}
-
-pub fn log_error(message: &str, error: &str) {
-    error!(message = message, error = error, "Error occurred");
-}
-
-pub fn log_warning(message: &str) {
-    warn!(message = message, "Warning");
-}
-
-pub fn log_debug(message: &str) {
-    debug!(message = message, "Debug");
 }

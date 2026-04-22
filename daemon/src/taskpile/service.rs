@@ -10,7 +10,10 @@ use uuid::Uuid;
 use crate::error::{TaskPileError, TaskPileResult};
 
 use super::{
-    cloud::{CloudAdapterStatus, CloudPayload, CloudTaskAdapter, CloudTaskResponse, NoopCloudAdapter},
+    cloud::{
+        CloudAdapterStatus, CloudPayload, CloudTaskAdapter, CloudTaskResponse, HttpCloudAdapter,
+        NoopCloudAdapter,
+    },
     crypto::init_encryption,
     logger::{init_logger, log_task_claim, log_task_completion, log_task_creation, log_task_failure, log_task_pause, log_task_resume, log_task_cancel},
     store::{SqliteTaskPileStore, TaskPileState, TaskPileStorage},
@@ -36,11 +39,19 @@ impl TaskPileService {
             .as_ref()
             .map(PathBuf::from)
             .unwrap_or_else(|| workspace_root.join(".morecode").join("taskpile"));
-        let cloud_adapter = Arc::new(NoopCloudAdapter::new(
-            config.cloud.enabled,
-            config.cloud.endpoint.clone(),
-            config.cloud.project_id.clone(),
-        ));
+        let cloud_adapter: Arc<dyn CloudTaskAdapter> = if config.cloud.enabled {
+            Arc::new(HttpCloudAdapter::new(
+                config.cloud.enabled,
+                config.cloud.endpoint.clone(),
+                config.cloud.project_id.clone(),
+            ))
+        } else {
+            Arc::new(NoopCloudAdapter::new(
+                config.cloud.enabled,
+                config.cloud.endpoint.clone(),
+                config.cloud.project_id.clone(),
+            ))
+        };
         
         // Initialize encryption with a default key (in production, this should come from config)
         init_encryption("taskpile_encryption_key_2026");
@@ -534,7 +545,7 @@ mod tests {
             max_attempts: 2,
             ..NewTaskRequest::default()
         };
-        let created = service.add_task(request).expect("create task");
+        let _created = service.add_task(request).expect("create task");
 
         // Claim and fail the task
         let claimed = service.claim_next_due(Utc::now()).expect("claim").expect("task");
@@ -589,7 +600,7 @@ mod tests {
             instruction: "test expired lease".to_string(),
             ..NewTaskRequest::default()
         };
-        let created = service.add_task(request).expect("create task");
+        let _created = service.add_task(request).expect("create task");
 
         // Claim the task
         let claimed = service.claim_next_due(Utc::now()).expect("claim").expect("task");

@@ -4,8 +4,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
+use chrono::Utc;
 use rusqlite::{params, Connection};
 
 use crate::error::{TaskPileError, TaskPileResult};
@@ -47,7 +46,7 @@ impl SqliteTaskPileStore {
     }
 
     fn init_db(&self) -> TaskPileResult<()> {
-        let mut conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().unwrap();
         conn.execute(
             r#"
             CREATE TABLE IF NOT EXISTS tasks (
@@ -103,7 +102,7 @@ impl SqliteTaskPileStore {
 impl TaskPileStorage for SqliteTaskPileStore {
     fn load(&self) -> TaskPileResult<TaskPileState> {
         self.ensure_ready()?;
-        let mut conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare("SELECT * FROM tasks").map_err(|e| TaskPileError::DbError(e.to_string()))?;
         let task_iter = stmt.query_map([], |row| {
             let instruction = row.get::<_, String>(2)?;

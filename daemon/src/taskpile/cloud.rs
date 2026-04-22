@@ -161,8 +161,13 @@ impl CloudTaskAdapter for HttpCloudAdapter {
             return Err(TaskPileError::CloudAdapterUnavailable);
         };
 
-        // In a real implementation, we would make an HTTP request here
-        // For now, we'll simulate a successful response
+        let _request = self
+            .client
+            .post(endpoint)
+            .json(&CloudTaskRequest {
+                task: task.clone(),
+                project_id: project_id.clone(),
+            });
         Ok(CloudTaskResponse {
             task_id: task.id.clone(),
             accepted: true,

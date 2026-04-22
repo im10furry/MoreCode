@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use chrono::DateTime;
-use crate::error::{TaskPileError, TaskPileResult};
+use crate::error::TaskPileResult;
 
 use super::super::types::TaskPileTask;
 

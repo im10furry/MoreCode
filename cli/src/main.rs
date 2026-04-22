@@ -26,6 +26,7 @@ async fn main() {
         Command::Doctor => command::doctor::execute(&context).await,
         Command::Daemon(daemon_command) => command::daemon::execute(&context, daemon_command).await,
         Command::OtherCli => command::othercli::execute(&context).await,
+        Command::OtherCliAutoMigrate => command::othercli::execute_auto_migrate(&context).await,
     };
 
     match result {

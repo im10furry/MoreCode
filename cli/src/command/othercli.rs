@@ -133,6 +133,59 @@ pub async fn execute(context: &AppContext) -> Result<String, String> {
     ))
 }
 
+pub async fn execute_auto_migrate(context: &AppContext) -> Result<String, String> {
+    println!("OtherCliAutoMigrateStarted");
+
+    let scan = scan_sources(&context.project_root).await?;
+
+    if scan.providers.is_empty() {
+        return Ok("未检测到可迁移的 Provider 配置线索".into());
+    }
+
+    // 自动选择所有检测到的 provider
+    let selected: Vec<usize> = (0..scan.providers.len()).collect();
+
+    // 默认写入到用户级配置
+    let target = WriteTarget::User;
+    let target_path = match target {
+        WriteTarget::User => ConfigLoader::default_global_config_path()
+            .map_err(|error| error.to_string())?,
+        WriteTarget::Project => context
+            .project_root
+            .join(mc_core::PROJECT_CONFIG_SUBDIR)
+            .join(mc_core::CONFIG_FILE_NAME),
+        WriteTarget::GenerateOnly => context
+            .project_root
+            .join(mc_core::PROJECT_CONFIG_SUBDIR)
+            .join("othercli-import.toml"),
+    };
+
+    let existing = existing_provider_names(&target_path).await;
+    let mut provider_names: HashSet<String> = context
+        .config
+        .provider
+        .provider_names()
+        .into_iter()
+        .map(str::to_string)
+        .collect();
+    provider_names.extend(existing);
+
+    let plan = build_import_plan(&scan.providers, &selected, &provider_names)?;
+
+    println!("OtherCliPlanGenerated");
+    println!("将自动写入：{}", target_path.display());
+    println!("{}", plan.preview_snippet);
+
+    apply_snippet(&target_path, &plan.preview_snippet).await?;
+    println!("OtherCliAutoMigrated");
+
+    Ok(format!(
+        "自动迁移完成：写入 {} 个 provider 到 {}",
+        plan.imported_count,
+        target_path.display()
+    ))
+}
+
 struct ScanResult {
     sources: Vec<DetectedSource>,
     providers: Vec<DetectedProvider>,

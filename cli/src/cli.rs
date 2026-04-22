@@ -15,6 +15,7 @@ pub enum Command {
     Doctor,
     Daemon(DaemonCommand),
     OtherCli,
+    OtherCliAutoMigrate,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -96,6 +97,7 @@ fn parse_command(args: &[String]) -> Result<Command, CliError> {
         }
         [cmd] if cmd == "doctor" => Ok(Command::Doctor),
         [cmd] if cmd == "othercli" => Ok(Command::OtherCli),
+        [cmd, sub] if cmd == "othercli" && sub == "auto-migrate" => Ok(Command::OtherCliAutoMigrate),
         [cmd, sub] if cmd == "memory" => Ok(Command::Memory(parse_memory_command(sub)?)),
         [cmd, sub] if cmd == "config" => Ok(Command::Config(parse_config_command(sub)?)),
         [cmd, sub] if cmd == "daemon" => Ok(Command::Daemon(parse_daemon_command(sub)?)),
@@ -136,6 +138,7 @@ fn usage() -> String {
         "  morecode config show",
         "  morecode doctor",
         "  morecode othercli",
+        "  morecode othercli auto-migrate",
         "  morecode daemon status",
     ]
     .join("\n")

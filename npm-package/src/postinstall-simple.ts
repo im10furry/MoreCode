@@ -11,6 +11,23 @@ function getBinaryName(): string {
   return (os.platform() as string) === 'win32' ? `${BINARY_NAME}.exe` : BINARY_NAME;
 }
 
+function findWorkspaceRoot(startDir: string): string | null {
+  let dir = startDir;
+  for (let i = 0; i < 8; i++) {
+    const cargoToml = path.join(dir, 'Cargo.toml');
+    const cliCargoToml = path.join(dir, 'cli', 'Cargo.toml');
+    if (fs.existsSync(cargoToml) && fs.existsSync(cliCargoToml)) {
+      return dir;
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) {
+      break;
+    }
+    dir = parent;
+  }
+  return null;
+}
+
 function getBinDir(): string {
   return path.join(__dirname, 'bin');
 }
@@ -34,13 +51,13 @@ async function installBinary(): Promise<void> {
     process.exit(1);
   }
 
-  // 检查是否是从源仓库安装的
-  const isSourceRepo = fs.existsSync(path.join(process.cwd(), 'Cargo.toml'));
-  if (isSourceRepo) {
+  const packageDir = path.resolve(__dirname, '..');
+  const workspaceRoot = findWorkspaceRoot(packageDir);
+  if (workspaceRoot) {
     console.log('Building MoreCode from source...');
-    const result = spawnSync('cargo', ['build', '-p', 'cli', '--release'], {
+    const result = spawnSync('cargo', ['build', '-p', 'cli', '--bin', BINARY_NAME, '--release'], {
       stdio: 'inherit',
-      cwd: process.cwd(),
+      cwd: workspaceRoot,
     });
 
     if (result.status !== 0) {
@@ -49,22 +66,17 @@ async function installBinary(): Promise<void> {
     }
 
     // 复制二进制文件
-    const sourcePath = path.join(process.cwd(), 'target', 'release', 'cli');
+    const sourcePath = path.join(workspaceRoot, 'target', 'release', getBinaryName());
     const destPath = getBinaryPath();
-    
-    let finalSourcePath = sourcePath;
-    if ((os.platform() as string) === 'win32' && !sourcePath.endsWith('.exe')) {
-      finalSourcePath = sourcePath + '.exe';
-    }
 
-    if (fs.existsSync(finalSourcePath)) {
-      fs.copyFileSync(finalSourcePath, destPath);
+    if (fs.existsSync(sourcePath)) {
+      fs.copyFileSync(sourcePath, destPath);
       if ((os.platform() as string) !== 'win32') {
         fs.chmodSync(destPath, '755');
       }
       console.log('✅ MoreCode built successfully!');
     } else {
-      console.error('Failed to find built binary at:', finalSourcePath);
+      console.error('Failed to find built binary at:', sourcePath);
       process.exit(1);
     }
   } else {
@@ -82,10 +94,10 @@ async function installBinary(): Promise<void> {
     console.log('   Visit https://rustup.rs/');
     console.log('');
     console.log('3. Build MoreCode:');
-    console.log('   cargo build -p cli --release');
+    console.log('   cargo build -p cli --bin morecode --release');
     console.log('');
     console.log('4. Run:');
-    console.log('   ./target/release/cli --help');
+    console.log('   ./target/release/morecode --help');
     console.log('');
     console.log('='.repeat(60));
   }

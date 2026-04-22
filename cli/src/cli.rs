@@ -9,7 +9,7 @@ pub struct Cli {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Command {
     Run { request: String },
-    Tui,
+    Tui { request: Option<String> },
     Memory(MemoryCommand),
     Config(ConfigCommand),
     Doctor,
@@ -79,7 +79,7 @@ impl Cli {
 
 fn parse_command(args: &[String]) -> Result<Command, CliError> {
     match args {
-        [] => Ok(Command::Tui),
+        [] => Ok(Command::Tui { request: None }),
         [cmd, rest @ ..] if cmd == "run" => {
             let request = rest.join(" ").trim().to_string();
             if request.is_empty() {
@@ -87,7 +87,13 @@ fn parse_command(args: &[String]) -> Result<Command, CliError> {
             }
             Ok(Command::Run { request })
         }
-        [cmd] if cmd == "tui" => Ok(Command::Tui),
+        [cmd] if cmd == "tui" => Ok(Command::Tui { request: None }),
+        [cmd, rest @ ..] if cmd == "tui" => {
+            let request = rest.join(" ").trim().to_string();
+            Ok(Command::Tui {
+                request: if request.is_empty() { None } else { Some(request) },
+            })
+        }
         [cmd] if cmd == "doctor" => Ok(Command::Doctor),
         [cmd] if cmd == "othercli" => Ok(Command::OtherCli),
         [cmd, sub] if cmd == "memory" => Ok(Command::Memory(parse_memory_command(sub)?)),
@@ -177,13 +183,13 @@ mod tests {
     #[test]
     fn parser_supports_tui_command() {
         let cli = Cli::parse(["morecode".to_string(), "tui".to_string()]).unwrap();
-        assert_eq!(cli.command, Command::Tui);
+        assert_eq!(cli.command, Command::Tui { request: None });
     }
 
     #[test]
     fn parser_defaults_to_tui_without_subcommand() {
         let cli = Cli::parse(["morecode".to_string()]).unwrap();
-        assert_eq!(cli.command, Command::Tui);
+        assert_eq!(cli.command, Command::Tui { request: None });
     }
 
     #[test]

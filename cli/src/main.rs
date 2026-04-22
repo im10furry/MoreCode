@@ -20,7 +20,7 @@ async fn main() {
 
     let result = match &cli.command {
         Command::Run { request } => command::run::execute(&context, request).await,
-        Command::Tui => command::tui::execute(&context).await,
+        Command::Tui { request } => command::tui::execute(&context, request.as_deref()).await,
         Command::Memory(memory_command) => command::memory::execute(&context, memory_command).await,
         Command::Config(config_command) => command::config::execute(&context, config_command).await,
         Command::Doctor => command::doctor::execute(&context).await,

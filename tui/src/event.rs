@@ -15,6 +15,7 @@ pub enum KeyAction {
     SetStreamMode(StreamMode),
     ScrollUp,
     ScrollDown,
+    ToggleLanguage,
     Help,
     Quit,
 }
@@ -40,6 +41,7 @@ impl KeyAction {
             (KeyCode::Char('3'), _) => Some(Self::SetStreamMode(StreamMode::Confirmation)),
             (KeyCode::Up, _) | (KeyCode::Char('k'), _) => Some(Self::ScrollUp),
             (KeyCode::Down, _) | (KeyCode::Char('j'), _) => Some(Self::ScrollDown),
+            (KeyCode::Char('t'), _) => Some(Self::ToggleLanguage),
             (KeyCode::Char('?'), _) | (KeyCode::F(1), _) => Some(Self::Help),
             (KeyCode::Esc, _)
             | (KeyCode::Char('q'), _)

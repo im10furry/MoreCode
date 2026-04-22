@@ -13,6 +13,7 @@
     "NPM_USAGE.md"
   ],
   "scripts": {
+    "postinstall": "node ./dist/postinstall-simple.js",
     "prepublishOnly": "npm run build",
     "build": "tsc"
   },

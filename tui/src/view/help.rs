@@ -4,21 +4,32 @@ use ratatui::widgets::{Paragraph, Wrap};
 use ratatui::Frame;
 
 use crate::app::AppState;
+use crate::i18n::{text, TextKey};
 use crate::theme::TuiTheme;
 
 pub fn render(frame: &mut Frame, area: Rect, state: &AppState, theme: TuiTheme) {
+    let lang = state.language();
     let lines = vec![
-        Line::from("Tab / Shift+Tab: switch panels"),
-        Line::from("1 / 2 / 3: progress, code, confirmation"),
-        Line::from("[ / ]: cycle feedback mode"),
-        Line::from("j / k or arrows: scroll"),
-        Line::from("?: open help"),
-        Line::from("q or Esc: quit"),
-        Line::from(format!("active panel: {}", state.active_panel().title())),
-        Line::from(format!("active stream: {}", state.stream_mode().title())),
+        Line::from(text(lang, TextKey::HelpSwitchPanels)),
+        Line::from(text(lang, TextKey::HelpSwitchStreams)),
+        Line::from(text(lang, TextKey::HelpCycleMode)),
+        Line::from(text(lang, TextKey::HelpScroll)),
+        Line::from(text(lang, TextKey::HelpToggleLanguage)),
+        Line::from(text(lang, TextKey::HelpOpenHelp)),
+        Line::from(text(lang, TextKey::HelpQuit)),
+        Line::from(format!(
+            "{} {}",
+            text(lang, TextKey::HelpActivePanel),
+            state.active_panel().title(lang)
+        )),
+        Line::from(format!(
+            "{} {}",
+            text(lang, TextKey::HelpActiveStream),
+            state.stream_mode().title(lang)
+        )),
     ];
     let paragraph = Paragraph::new(lines)
-        .block(theme.panel_block("Help", true))
+        .block(theme.panel_block(text(lang, TextKey::HelpTitle), true))
         .scroll((state.scroll_offset(state.active_panel()), 0))
         .wrap(Wrap { trim: false });
     frame.render_widget(paragraph, area);

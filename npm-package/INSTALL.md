@@ -26,15 +26,15 @@ npm install -g ./npm-package/morecode-agent-0.1.0-alpha.1.tgz
 cd MoreCode
 
 # Build the Rust binary
-cargo build -p cli --release
+cargo build -p cli --bin morecode --release
 
 # Copy the binary
 # Linux/macOS:
-cp target/release/cli $(npm config get prefix)/lib/node_modules/@morecode/agent/dist/bin/morecode
+cp target/release/morecode $(npm config get prefix)/lib/node_modules/@morecode/agent/dist/bin/morecode
 chmod +x $(npm config get prefix)/lib/node_modules/@morecode/agent/dist/bin/morecode
 
 # Windows:
-copy target\release\cli.exe $(npm config get prefix)\lib\node_modules\@morecode\agent\dist\bin\morecode.exe
+copy target\release\morecode.exe $(npm config get prefix)\lib\node_modules\@morecode\agent\dist\bin\morecode.exe
 ```
 
 ### 4. Verify Installation

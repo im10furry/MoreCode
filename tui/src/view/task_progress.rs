@@ -4,10 +4,12 @@ use ratatui::widgets::{Gauge, Paragraph, Tabs, Wrap};
 use ratatui::Frame;
 
 use crate::app::{active_stream_mode_index, status_label, AppState, StreamMode};
+use crate::i18n::{text, TextKey};
 use crate::theme::TuiTheme;
 use crate::widget::progress_bar::{progress_ratio, render_progress_bar};
 
 pub fn render(frame: &mut Frame, area: Rect, state: &AppState, theme: TuiTheme) {
+    let lang = state.language();
     let sections = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -20,17 +22,17 @@ pub fn render(frame: &mut Frame, area: Rect, state: &AppState, theme: TuiTheme) 
     let tabs = Tabs::new(
         StreamMode::ALL
             .into_iter()
-            .map(|mode| Line::from(mode.title()))
+            .map(|mode| Line::from(mode.title(lang)))
             .collect::<Vec<_>>(),
     )
     .select(active_stream_mode_index(state.stream_mode()))
-    .block(theme.panel_block("Feedback Modes", false))
+    .block(theme.panel_block(text(lang, TextKey::TaskProgressFeedbackModes), false))
     .style(theme.muted())
     .highlight_style(theme.accent());
     frame.render_widget(tabs, sections[0]);
 
     let gauge = Gauge::default()
-        .block(theme.panel_block("Task Progress", false))
+        .block(theme.panel_block(text(lang, TextKey::TaskProgressTaskProgress), false))
         .gauge_style(theme.accent())
         .ratio(progress_ratio(state.overall_progress()))
         .label(format!("{}%", state.overall_progress()));
@@ -44,7 +46,7 @@ pub fn render(frame: &mut Frame, area: Rect, state: &AppState, theme: TuiTheme) 
                 Line::from(format!(
                     "{} {} {} {}",
                     task.agent_type,
-                    status_label(task.status),
+                    status_label(lang, task.status),
                     render_progress_bar(12, task.progress_percent),
                     task.summary
                 ))
@@ -69,11 +71,11 @@ pub fn render(frame: &mut Frame, area: Rect, state: &AppState, theme: TuiTheme) 
     };
 
     let body = Paragraph::new(if lines.is_empty() {
-        vec![Line::from("No events yet")]
+        vec![Line::from(text(lang, TextKey::EmptyNoEvents))]
     } else {
         lines
     })
-    .block(theme.panel_block("Stream Output", true))
+    .block(theme.panel_block(text(lang, TextKey::TaskProgressStreamOutput), true))
     .scroll((state.scroll_offset(state.active_panel()), 0))
     .wrap(Wrap { trim: false });
     frame.render_widget(body, sections[2]);

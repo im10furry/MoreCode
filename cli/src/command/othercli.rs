@@ -4,7 +4,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use mc_config::{ConfigLoader, PartialAppConfig};
+use mc_config::ConfigLoader;
 use serde_json::Value as JsonValue;
 
 use crate::init::AppContext;
@@ -56,7 +56,7 @@ pub async fn execute(context: &AppContext) -> Result<String, String> {
     }
 
     if scan.providers.is_empty() {
-        return Ok("未检测到可迁移的 Provider 配置线索（已按安全规则跳过项目 .env 明文导入）".into());
+        return Ok("未检测到可迁移的 Provider 配置线索（项目 .env 仅检测环境变量键名，不会导入任何明文值）".into());
     }
 
     println!();
@@ -687,7 +687,7 @@ async fn existing_provider_names(path: &Path) -> HashSet<String> {
     let Ok(contents) = tokio::fs::read_to_string(path).await else {
         return HashSet::new();
     };
-    let Ok(partial) = toml::from_str::<PartialAppConfig>(&contents) else {
+    let Ok(partial) = mc_config::loader::parse_partial_app_config(&contents) else {
         return HashSet::new();
     };
     let Some(provider) = partial.provider else {

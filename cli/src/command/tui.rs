@@ -1,175 +1,339 @@
+use std::collections::HashMap;
+use std::sync::Arc;
+
 use chrono::Utc;
-use mc_communication::{
-    ApprovalRequest, ApprovalResponse, BroadcastEvent, ControlMessage, StateMessage,
+use mc_agent::registry_min::AgentRegistry;
+use mc_communication::{BroadcastEvent, StateMessage};
+use mc_config::ResolvedProviderEntry;
+use mc_coordinator::{AgentExecutionState, Coordinator, CoordinatorConfig, ExecutionStatus};
+use mc_core::{AgentExecutionReport, AgentType, ResultType, TaskResult};
+use mc_llm::{
+    AnthropicProvider, AnthropicProviderConfig, GoogleProvider, GoogleProviderConfig, LlmProvider,
+    ModelInfo, OpenAiProvider, OpenAiProviderConfig,
 };
-use mc_core::{AgentExecutionReport, AgentType, Complexity, ResultType, SubTask, TaskResult};
-use mc_tui::{LogLevel, Tui, TuiError, TuiHandle};
-use tokio::time::{sleep, Duration};
+use mc_tui::{LogLevel, Tui, TuiHandle};
+use tokio::task::JoinHandle;
+use tokio::time::{interval, Duration};
+use tokio_util::sync::CancellationToken;
 
 use crate::init::AppContext;
 
-pub async fn execute(_context: &AppContext) -> Result<String, String> {
+pub async fn execute(context: &AppContext, request: Option<&str>) -> Result<String, String> {
     let (tui, handle) = Tui::new("MoreCode TUI");
-    let demo = tokio::spawn(async move {
-        let _ = emit_demo(handle).await;
-    });
+    let mut tui = tui;
+    tui.set_tick_rate(Duration::from_millis(context.config.tui.refresh_rate_ms.max(16)));
+
+    let cancel = CancellationToken::new();
+    let worker = match request.map(str::trim).filter(|value| !value.is_empty()) {
+        Some(request) => Some(spawn_coordinator_job(
+            context,
+            handle.clone(),
+            request.to_string(),
+            cancel.clone(),
+        )),
+        None => {
+            let _ = handle.log(
+                LogLevel::Info,
+                "No request provided. Usage: morecode tui <request>",
+            );
+            None
+        }
+    };
 
     let result = tui.run().await.map(|exit| exit.to_string());
-    demo.abort();
+    cancel.cancel();
+    if let Some(worker) = worker {
+        worker.abort();
+    }
     result.map_err(|error| error.to_string())
 }
 
-async fn emit_demo(handle: TuiHandle) -> Result<(), TuiError> {
-    handle.log(LogLevel::Info, "Starting demo stream")?;
-    handle.control(assign(
-        AgentType::Explorer,
-        "task-tui",
-        "Scan workspace for TUI integration points",
-        "Produce a project summary",
-        3_000,
-    ))?;
-    sleep(Duration::from_millis(300)).await;
+fn spawn_coordinator_job(
+    context: &AppContext,
+    handle: TuiHandle,
+    request: String,
+    cancel: CancellationToken,
+) -> JoinHandle<()> {
+    let config = context.config.clone();
+    let project_root = context.project_root.clone();
 
-    handle.state(StateMessage::Progress {
-        task_id: "task-tui".to_string(),
-        agent_type: AgentType::Explorer,
-        phase: "scan".to_string(),
-        progress_percent: 35,
-        message: "Reading README and communication contracts".to_string(),
-    })?;
-    handle.broadcast(BroadcastEvent::ProgressSnapshot {
-        task_id: "task-tui".to_string(),
-        agent_type: AgentType::Explorer,
-        progress_percent: 35,
-        summary: "Explorer is mapping the workspace".to_string(),
-    })?;
-    sleep(Duration::from_millis(300)).await;
+    tokio::spawn(async move {
+        let task_id = format!("run-{}", uuid::Uuid::new_v4());
+        let _ = handle.log(LogLevel::Info, format!("request: {request}"));
 
-    handle.state(StateMessage::Handoff {
-        task_id: "task-tui".to_string(),
-        from_agent: AgentType::Explorer,
-        to_agent: AgentType::Planner,
-        handoff: report("Workspace scan complete", 420),
-    })?;
-    handle.control(assign(
-        AgentType::Coder,
-        "task-tui",
-        "Implement Ratatui dashboard and event loop",
-        "Wire live status updates into the terminal UI",
-        5_000,
-    ))?;
-    sleep(Duration::from_millis(300)).await;
+        let resolved = match config.provider.resolve_default_provider() {
+            Some(resolved) => resolved,
+            None => {
+                let _ = handle.log(LogLevel::Error, "provider: cannot resolve default provider");
+                return;
+            }
+        };
 
-    handle.state(StateMessage::Progress {
-        task_id: "task-tui".to_string(),
-        agent_type: AgentType::Coder,
-        phase: "coding".to_string(),
-        progress_percent: 60,
-        message: "Rendering agent, topology, token and log panels".to_string(),
-    })?;
-    handle.state(StateMessage::PartialResult {
-        task_id: "task-tui".to_string(),
-        from_agent: AgentType::Coder,
-        to_agent: AgentType::Reviewer,
-        payload: serde_json::json!({
-            "changed_files": ["tui/src/app.rs", "tui/src/view/dashboard.rs"],
-            "status": "render pipeline ready"
-        }),
-    })?;
-    handle.state(StateMessage::StreamChunk {
-        task_id: "task-tui".to_string(),
-        from_agent: AgentType::Coder,
-        to_agent: AgentType::Reviewer,
-        sequence: 1,
-        payload: "fn render_dashboard(frame: &mut Frame, area: Rect) { ... }".to_string(),
-        is_last: false,
-    })?;
-    sleep(Duration::from_millis(300)).await;
+        let llm = match build_llm_provider(resolved) {
+            Ok(provider) => provider,
+            Err(error) => {
+                let _ = handle.log(LogLevel::Error, format!("provider: {error}"));
+                return;
+            }
+        };
 
-    handle.approval_request(ApprovalRequest {
-        request_id: "approval-tui-demo".to_string(),
-        task_id: "task-tui".to_string(),
-        agent_type: "Coder".to_string(),
-        reason: "Replace the placeholder TUI with a Ratatui implementation".to_string(),
-        options: vec!["approve".to_string(), "reject".to_string()],
-        recommendation: Some("approve".to_string()),
-        created_at: Utc::now(),
-        timeout_secs: 30,
-    })?;
-    sleep(Duration::from_millis(300)).await;
+        let registry = Arc::new(AgentRegistry::new());
+        registry.register_defaults();
 
-    handle.approval_response(ApprovalResponse {
-        request_id: "approval-tui-demo".to_string(),
-        choice: "approve".to_string(),
-        approved: true,
-        comment: Some("Proceed with the full UI module".to_string()),
-        responded_at: Utc::now(),
-    })?;
-    handle.broadcast(BroadcastEvent::SystemNotification {
-        level: "warn".to_string(),
-        message: "Demo: token budget is nearing the warning threshold".to_string(),
-    })?;
-    handle.state(StateMessage::TaskCompleted {
-        task_id: "task-tui".to_string(),
-        agent_type: AgentType::Coder,
-        result: result("TUI module implemented"),
-        handoff: report("Implementation complete", 1_650),
-        token_used: 1_650,
-    })?;
-    handle.log(
-        LogLevel::Info,
-        "Demo stream finished; inspect panels and press q",
-    )?;
-    Ok(())
+        let coordinator = match Coordinator::new(
+            CoordinatorConfig {
+                max_token_budget: config.coordinator.max_token_budget,
+                max_recursion_depth: config.coordinator.max_recursion_depth,
+                agent_timeout_secs: config.coordinator.agent_timeout_secs,
+                max_retries: config.coordinator.max_retries,
+                memory_aware_routing: config.coordinator.memory_aware_routing,
+                recursive_orchestration: config.coordinator.recursive_orchestration,
+                memory_stale_threshold_days: config.coordinator.memory_stale_threshold_days,
+                preflight_check: config.coordinator.preflight_check,
+                llm_weight_multiplier: config.coordinator.llm_weight_multiplier,
+            },
+            llm,
+            registry,
+            project_root,
+        ) {
+            Ok(coordinator) => Arc::new(coordinator),
+            Err(error) => {
+                let _ = handle.log(LogLevel::Error, format!("coordinator: {error}"));
+                return;
+            }
+        };
+
+        let status_task = tokio::spawn(poll_execution_status(
+            coordinator.clone(),
+            handle.clone(),
+            task_id.clone(),
+            cancel.clone(),
+        ));
+
+        let result = coordinator.handle_request(&request).await;
+        cancel.cancel();
+        status_task.abort();
+
+        match result {
+            Ok(response) => {
+                let content = response.content;
+                let _ = handle.log(LogLevel::Info, content.clone());
+                let _ = handle.broadcast(BroadcastEvent::SystemNotification {
+                    level: "info".to_string(),
+                    message: "request completed".to_string(),
+                });
+                let _ = handle.state(StateMessage::TaskCompleted {
+                    task_id,
+                    agent_type: AgentType::Coordinator,
+                    result: TaskResult {
+                        result_type: ResultType::AnalysisReport,
+                        success: true,
+                        data: serde_json::json!({ "type": format!("{:?}", response.response_type) }),
+                        changed_files: Vec::new(),
+                        generated_content: Some(content),
+                        error_message: None,
+                    },
+                    handoff: AgentExecutionReport {
+                        title: "Coordinator finished".to_string(),
+                        key_findings: Vec::new(),
+                        relevant_files: Vec::new(),
+                        recommendations: Vec::new(),
+                        warnings: Vec::new(),
+                        token_used: 0,
+                        timestamp: Utc::now(),
+                        extra: None,
+                    },
+                    token_used: 0,
+                });
+            }
+            Err(error) => {
+                let _ = handle.log(LogLevel::Error, error.to_string());
+                let _ = handle.broadcast(BroadcastEvent::SystemNotification {
+                    level: "error".to_string(),
+                    message: "request failed".to_string(),
+                });
+                let _ = handle.state(StateMessage::TaskFailed {
+                    task_id,
+                    agent_type: AgentType::Coordinator,
+                    error: error.to_string(),
+                    retry_count: 0,
+                    can_retry: false,
+                });
+            }
+        }
+    })
 }
 
-fn assign(
-    agent_type: AgentType,
+async fn poll_execution_status(
+    coordinator: Arc<Coordinator>,
+    handle: TuiHandle,
+    task_id: String,
+    cancel: CancellationToken,
+) {
+    let mut ticker = interval(Duration::from_millis(200));
+    let mut last_phase: Option<String> = None;
+    let mut last_overall: u8 = 0;
+    let mut last_agents: HashMap<AgentType, AgentExecutionState> = HashMap::new();
+
+    loop {
+        tokio::select! {
+            _ = cancel.cancelled() => break,
+            _ = ticker.tick() => {}
+        }
+
+        let Some(status) = coordinator.execution_status().await else {
+            continue;
+        };
+        apply_status_snapshot(
+            &handle,
+            &task_id,
+            status,
+            &mut last_phase,
+            &mut last_overall,
+            &mut last_agents,
+        );
+    }
+}
+
+fn apply_status_snapshot(
+    handle: &TuiHandle,
     task_id: &str,
-    description: &str,
-    expected_output: &str,
-    token_budget: u64,
-) -> ControlMessage {
-    ControlMessage::TaskAssigned {
-        task_id: task_id.to_string(),
-        agent_type,
-        task: SubTask {
-            id: format!("{task_id}-{agent_type}"),
-            description: description.to_string(),
-            target_files: vec!["tui/src".to_string()],
-            expected_output: expected_output.to_string(),
-            token_budget: token_budget as u32,
-            priority: 0,
-            estimated_complexity: Complexity::Medium,
-            acceptance_criteria: vec!["cargo test -p tui".to_string()],
-            completed: false,
-            assigned_agent: agent_type,
-        },
-        context: Box::new(report("demo", 0)),
-        token_budget,
+    status: ExecutionStatus,
+    last_phase: &mut Option<String>,
+    last_overall: &mut u8,
+    last_agents: &mut HashMap<AgentType, AgentExecutionState>,
+) {
+    let phase = format!("{:?}", status.current_phase).to_ascii_lowercase();
+    let overall = (status.progress_percent.max(0.0).min(1.0) * 100.0).round() as u8;
+
+    let phase_changed = last_phase.as_deref() != Some(phase.as_str());
+    let overall_changed = overall != *last_overall;
+    if phase_changed {
+        *last_phase = Some(phase.clone());
+    }
+    if overall_changed {
+        *last_overall = overall;
+    }
+
+    for runtime in status.agent_statuses.values() {
+        let agent_type = runtime.agent_type;
+        let previous = last_agents.get(&agent_type).cloned();
+        let state_changed = previous.as_ref() != Some(&runtime.state);
+        if !(state_changed || phase_changed || (overall_changed && overall % 2 == 0)) {
+            continue;
+        }
+
+        last_agents.insert(agent_type, runtime.state.clone());
+
+        match &runtime.state {
+            AgentExecutionState::Pending => {}
+            AgentExecutionState::Running => {
+                let _ = handle.state(StateMessage::Progress {
+                    task_id: task_id.to_string(),
+                    agent_type,
+                    phase: phase.clone(),
+                    progress_percent: overall,
+                    message: String::new(),
+                });
+            }
+            AgentExecutionState::Completed => {
+                let _ = handle.state(StateMessage::TaskCompleted {
+                    task_id: task_id.to_string(),
+                    agent_type,
+                    result: TaskResult {
+                        result_type: ResultType::AnalysisReport,
+                        success: true,
+                        data: serde_json::json!({}),
+                        changed_files: Vec::new(),
+                        generated_content: None,
+                        error_message: None,
+                    },
+                    handoff: AgentExecutionReport {
+                        title: format!("{agent_type} completed"),
+                        key_findings: Vec::new(),
+                        relevant_files: Vec::new(),
+                        recommendations: Vec::new(),
+                        warnings: Vec::new(),
+                        token_used: runtime.tokens_used.min(u32::MAX as usize) as u32,
+                        timestamp: Utc::now(),
+                        extra: None,
+                    },
+                    token_used: runtime.tokens_used as u64,
+                });
+            }
+            AgentExecutionState::Failed(message) => {
+                let _ = handle.state(StateMessage::TaskFailed {
+                    task_id: task_id.to_string(),
+                    agent_type,
+                    error: message.clone(),
+                    retry_count: 0,
+                    can_retry: false,
+                });
+            }
+        }
     }
 }
 
-fn report(title: &str, token_used: u32) -> AgentExecutionReport {
-    AgentExecutionReport {
-        title: title.to_string(),
-        key_findings: vec!["TUI scaffold is ready".to_string()],
-        relevant_files: vec!["tui/src/app.rs".to_string()],
-        recommendations: vec!["Run cargo test -p tui".to_string()],
-        warnings: Vec::new(),
-        token_used,
-        timestamp: Utc::now(),
-        extra: None,
+fn build_llm_provider(
+    resolved: ResolvedProviderEntry,
+) -> Result<Arc<dyn LlmProvider>, String> {
+    let provider_type = resolved.provider_type.as_str();
+    if provider_type == "mock" {
+        return Err("mock provider is not supported for TUI execution".to_string());
     }
-}
 
-fn result(summary: &str) -> TaskResult {
-    TaskResult {
-        result_type: ResultType::CodeChange,
-        success: true,
-        data: serde_json::json!({ "summary": summary }),
-        changed_files: vec!["tui/src/app.rs".to_string()],
-        generated_content: Some(summary.to_string()),
-        error_message: None,
+    let base_url = resolved
+        .base_url
+        .ok_or_else(|| "provider.base_url is required".to_string())?;
+    let api_key = resolved
+        .api_key
+        .ok_or_else(|| "provider.api_key/api_key_env is required".to_string())?;
+    let model_id = resolved
+        .default_model
+        .ok_or_else(|| "provider.default_model is required".to_string())?;
+    let model = ModelInfo::new(&model_id, &model_id, &resolved.name);
+
+    match provider_type {
+        "openai-compat" => {
+            let provider = OpenAiProvider::from_config(OpenAiProviderConfig {
+                base_url,
+                api_key,
+                model,
+                default_headers: resolved.headers,
+                request_timeout: Duration::from_secs(120),
+                stream_buffer_size: 64,
+            })
+            .map_err(|error| error.to_string())?;
+            Ok(Arc::new(provider))
+        }
+        "anthropic" => {
+            let provider = AnthropicProvider::from_config(AnthropicProviderConfig {
+                base_url,
+                api_key,
+                model,
+                anthropic_version: "2023-06-01".to_string(),
+                beta_headers: Vec::new(),
+                default_headers: resolved.headers,
+                request_timeout: Duration::from_secs(120),
+                stream_buffer_size: 64,
+                default_max_tokens: 4_096,
+            })
+            .map_err(|error| error.to_string())?;
+            Ok(Arc::new(provider))
+        }
+        "google" => {
+            let provider = GoogleProvider::from_config(GoogleProviderConfig {
+                base_url,
+                api_key,
+                model,
+                default_headers: resolved.headers,
+                request_timeout: Duration::from_secs(120),
+                stream_buffer_size: 64,
+                default_max_output_tokens: 8_192,
+            })
+            .map_err(|error| error.to_string())?;
+            Ok(Arc::new(provider))
+        }
+        other => Err(format!("unsupported provider_type: {other}")),
     }
 }

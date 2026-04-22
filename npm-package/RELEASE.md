@@ -40,15 +40,15 @@ npm install -g ./morecode-agent-0.1.0-alpha.1.tgz
 
 # Step 2: Build the Rust binary
 cd MoreCode
-cargo build -p cli --release
+cargo build -p cli --bin morecode --release
 
 # Step 3: Copy binary
 # Linux/macOS:
-cp target/release/cli $(npm config get prefix)/lib/node_modules/@morecode/agent/dist/bin/morecode
+cp target/release/morecode $(npm config get prefix)/lib/node_modules/@morecode/agent/dist/bin/morecode
 chmod +x $(npm config get prefix)/lib/node_modules/@morecode/agent/dist/bin/morecode
 
 # Windows:
-copy target\release\cli.exe $(npm config get prefix)\lib\node_modules\@morecode\agent\dist\bin\morecode.exe
+copy target\release\morecode.exe $(npm config get prefix)\lib\node_modules\@morecode\agent\dist\bin\morecode.exe
 
 # Step 4: Test
 morecode --help
@@ -60,8 +60,8 @@ Just use cargo directly:
 
 ```bash
 cd MoreCode
-cargo build -p cli --release
-./target/release/cli --help
+cargo build -p cli --bin morecode --release
+./target/release/morecode --help
 ```
 
 ## Features

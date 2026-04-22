@@ -5,10 +5,12 @@ use ratatui::widgets::{Cell, Paragraph, Row, Sparkline, Table};
 use ratatui::Frame;
 
 use crate::app::AppState;
+use crate::i18n::{text, TextKey};
 use crate::theme::TuiTheme;
 use crate::widget::sparkline::compress_history;
 
 pub fn render(frame: &mut Frame, area: Rect, state: &AppState, theme: TuiTheme) {
+    let lang = state.language();
     let sections = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Length(8), Constraint::Min(0)])
@@ -19,25 +21,33 @@ pub fn render(frame: &mut Frame, area: Rect, state: &AppState, theme: TuiTheme) 
         .split(sections[0]);
 
     let summary = Paragraph::new(vec![
-        Line::from(format!("total: {}", state.token_total())),
+        Line::from(format!(
+            "{} {}",
+            text(lang, TextKey::TokenLineTotal),
+            state.token_total()
+        )),
         Line::from(match state.token_budget_total() {
-            Some(budget) => format!("budget: {budget}"),
-            None => "budget: -".to_string(),
+            Some(budget) => format!("{} {budget}", text(lang, TextKey::TokenLineBudget)),
+            None => format!("{} -", text(lang, TextKey::TokenLineBudget)),
         }),
-        Line::from(format!("running agents: {}", state.running_agent_count())),
+        Line::from(format!(
+            "{} {}",
+            text(lang, TextKey::TokenLineRunningAgents),
+            state.running_agent_count()
+        )),
         Line::from(if state.has_budget_warning() {
-            "status: warning".to_string()
+            text(lang, TextKey::TokenLineStatusWarning).to_string()
         } else {
-            "status: healthy".to_string()
+            text(lang, TextKey::TokenLineStatusHealthy).to_string()
         }),
     ])
-    .block(theme.panel_block("Token Summary", false));
+    .block(theme.panel_block(text(lang, TextKey::TokenSummaryTitle), false));
     frame.render_widget(summary, top[0]);
 
     let history = state.token_history().iter().copied().collect::<Vec<_>>();
     let values = compress_history(&history, top[1].width as usize);
     let sparkline = Sparkline::default()
-        .block(theme.panel_block("Consumption Trend", false))
+        .block(theme.panel_block(text(lang, TextKey::TokenTrendTitle), false))
         .data(&values)
         .style(theme.accent());
     frame.render_widget(sparkline, top[1]);
@@ -64,10 +74,15 @@ pub fn render(frame: &mut Frame, area: Rect, state: &AppState, theme: TuiTheme) 
         ],
     )
     .header(
-        Row::new(vec!["Agent", "Used", "Budget", "Last Detail"])
+        Row::new(vec![
+            text(lang, TextKey::TokenHeaderAgent),
+            text(lang, TextKey::TokenHeaderUsed),
+            text(lang, TextKey::TokenHeaderBudget),
+            text(lang, TextKey::TokenHeaderLastDetail),
+        ])
             .style(theme.accent().add_modifier(Modifier::BOLD)),
     )
-    .block(theme.panel_block("Per-Agent Usage", true))
+    .block(theme.panel_block(text(lang, TextKey::TokenPerAgentTitle), true))
     .column_spacing(1);
     frame.render_widget(table, sections[1]);
 }

@@ -14,6 +14,7 @@ use ratatui::Frame;
 
 use crate::error::TuiError;
 use crate::event::{AppEvent, KeyAction, LogLevel, TuiUpdate};
+use crate::i18n::{text, Language, TextKey};
 use crate::theme::TuiTheme;
 use crate::view;
 
@@ -44,15 +45,15 @@ impl Panel {
         Self::Help,
     ];
 
-    pub const fn title(self) -> &'static str {
+    pub fn title(self, lang: Language) -> &'static str {
         match self {
-            Self::Dashboard => "Dashboard",
-            Self::AgentStatus => "Agents",
-            Self::TaskProgress => "Progress",
-            Self::Communication => "Topology",
-            Self::TokenUsage => "Tokens",
-            Self::Log => "Logs",
-            Self::Help => "Help",
+            Self::Dashboard => text(lang, TextKey::PanelDashboard),
+            Self::AgentStatus => text(lang, TextKey::PanelAgents),
+            Self::TaskProgress => text(lang, TextKey::PanelProgress),
+            Self::Communication => text(lang, TextKey::PanelTopology),
+            Self::TokenUsage => text(lang, TextKey::PanelTokens),
+            Self::Log => text(lang, TextKey::PanelLogs),
+            Self::Help => text(lang, TextKey::PanelHelp),
         }
     }
 }
@@ -67,11 +68,11 @@ pub enum StreamMode {
 impl StreamMode {
     pub const ALL: [Self; 3] = [Self::Progress, Self::Code, Self::Confirmation];
 
-    pub const fn title(self) -> &'static str {
+    pub fn title(self, lang: Language) -> &'static str {
         match self {
-            Self::Progress => "Progress",
-            Self::Code => "Code",
-            Self::Confirmation => "Confirmation",
+            Self::Progress => text(lang, TextKey::StreamProgress),
+            Self::Code => text(lang, TextKey::StreamCode),
+            Self::Confirmation => text(lang, TextKey::StreamConfirmation),
         }
     }
 }
@@ -237,6 +238,7 @@ pub struct UiLogEntry {
 pub struct AppState {
     pub(crate) active_panel: Panel,
     pub(crate) stream_mode: StreamMode,
+    pub(crate) language: Language,
     pub(crate) title: String,
     pub(crate) should_quit: bool,
     pub(crate) terminal_size: (u16, u16),
@@ -317,6 +319,11 @@ impl App {
                 self.adjust_scroll(1);
                 Ok(())
             }
+            AppEvent::Key(KeyAction::ToggleLanguage) => {
+                self.state.language = self.state.language.toggle();
+                self.push_log(LogLevel::Info, format!("language: {:?}", self.state.language));
+                Ok(())
+            }
             AppEvent::Key(KeyAction::Help) => {
                 self.state.active_panel = Panel::Help;
                 Ok(())
@@ -346,9 +353,10 @@ impl App {
     }
 
     fn render_header(&self, frame: &mut Frame, area: Rect) {
+        let lang = self.state.language;
         let titles = Panel::ALL
             .into_iter()
-            .map(|panel| Line::from(panel.title()))
+            .map(|panel| Line::from(panel.title(lang)))
             .collect::<Vec<_>>();
         let title = Line::from(vec![
             Span::styled(
@@ -357,7 +365,7 @@ impl App {
             ),
             Span::raw("  "),
             Span::styled(
-                format!("stream: {}", self.state.stream_mode.title()),
+                format!("stream: {}", self.state.stream_mode.title(lang)),
                 self.theme.accent(),
             ),
         ]);
@@ -371,6 +379,7 @@ impl App {
     }
 
     fn render_footer(&self, frame: &mut Frame, area: Rect) {
+        let lang = self.state.language;
         let progress = self.state.overall_progress();
         let token_summary = match self.state.token_budget_total() {
             Some(budget) => format!("tokens {}/{}", self.state.token_total, budget),
@@ -378,16 +387,19 @@ impl App {
         };
         let mut spans = vec![
             Span::styled("Tab", self.theme.accent()),
-            Span::raw(" next "),
+            Span::raw(text(lang, TextKey::FooterNext)),
             Span::styled("Shift+Tab", self.theme.accent()),
-            Span::raw(" prev "),
+            Span::raw(text(lang, TextKey::FooterPrev)),
             Span::styled("1/2/3", self.theme.accent()),
-            Span::raw(" streams "),
+            Span::raw(text(lang, TextKey::FooterStreams)),
             Span::styled("j/k", self.theme.accent()),
-            Span::raw(" scroll "),
+            Span::raw(text(lang, TextKey::FooterScroll)),
             Span::styled("?/q", self.theme.accent()),
-            Span::raw(" help/quit  "),
-            Span::styled(format!("progress {progress}%"), self.theme.text()),
+            Span::raw(text(lang, TextKey::FooterHelpQuit)),
+            Span::styled(
+                format!("{} {progress}%", text(lang, TextKey::FooterProgress)),
+                self.theme.text(),
+            ),
             Span::raw("  "),
         ];
         let token_style = if self.state.has_budget_warning() {
@@ -398,7 +410,7 @@ impl App {
         spans.push(Span::styled(token_summary, token_style));
 
         let footer = Paragraph::new(Line::from(spans))
-            .block(self.theme.panel_block("Controls", false))
+            .block(self.theme.panel_block(text(lang, TextKey::FooterControls), false))
             .style(self.theme.muted());
         frame.render_widget(footer, area);
     }
@@ -984,6 +996,7 @@ impl AppState {
         Self {
             active_panel: Panel::Dashboard,
             stream_mode: StreamMode::Progress,
+            language: Language::detect(),
             title: title.into(),
             should_quit: false,
             terminal_size: (0, 0),
@@ -1008,6 +1021,10 @@ impl AppState {
 
     pub fn stream_mode(&self) -> StreamMode {
         self.stream_mode
+    }
+
+    pub fn language(&self) -> Language {
+        self.language
     }
 
     pub fn should_quit(&self) -> bool {
@@ -1157,13 +1174,13 @@ pub(crate) fn active_stream_mode_index(current: StreamMode) -> usize {
         .unwrap_or(0)
 }
 
-pub(crate) fn status_label(status: AgentExecutionStatus) -> &'static str {
+pub(crate) fn status_label(lang: Language, status: AgentExecutionStatus) -> &'static str {
     match status {
-        AgentExecutionStatus::Pending => "pending",
-        AgentExecutionStatus::Running => "running",
-        AgentExecutionStatus::Completed => "completed",
-        AgentExecutionStatus::Failed => "failed",
-        AgentExecutionStatus::Cancelled => "cancelled",
+        AgentExecutionStatus::Pending => text(lang, TextKey::StatusPending),
+        AgentExecutionStatus::Running => text(lang, TextKey::StatusRunning),
+        AgentExecutionStatus::Completed => text(lang, TextKey::StatusCompleted),
+        AgentExecutionStatus::Failed => text(lang, TextKey::StatusFailed),
+        AgentExecutionStatus::Cancelled => text(lang, TextKey::StatusCancelled),
     }
 }
 

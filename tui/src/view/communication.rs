@@ -6,10 +6,12 @@ use ratatui::widgets::{Cell, Paragraph, Row, Table, Wrap};
 use ratatui::Frame;
 
 use crate::app::{AppState, Endpoint};
+use crate::i18n::{text, TextKey};
 use crate::theme::TuiTheme;
 use crate::widget::tree::{render_tree, TreeNode};
 
 pub fn render(frame: &mut Frame, area: Rect, state: &AppState, theme: TuiTheme) {
+    let lang = state.language();
     let sections = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(60), Constraint::Percentage(40)])
@@ -35,10 +37,16 @@ pub fn render(frame: &mut Frame, area: Rect, state: &AppState, theme: TuiTheme) 
         ],
     )
     .header(
-        Row::new(vec!["Count", "Kind", "From", "To", "Summary"])
+        Row::new(vec![
+            text(lang, TextKey::CommunicationHeaderCount),
+            text(lang, TextKey::CommunicationHeaderKind),
+            text(lang, TextKey::CommunicationHeaderFrom),
+            text(lang, TextKey::CommunicationHeaderTo),
+            text(lang, TextKey::CommunicationHeaderSummary),
+        ])
             .style(theme.accent().add_modifier(Modifier::BOLD)),
     )
-    .block(theme.panel_block("Communication Edges", true))
+    .block(theme.panel_block(text(lang, TextKey::CommunicationEdgesTitle), true))
     .column_spacing(1);
     frame.render_widget(table, sections[0]);
 
@@ -57,7 +65,7 @@ pub fn render(frame: &mut Frame, area: Rect, state: &AppState, theme: TuiTheme) 
         })
         .collect::<Vec<_>>();
     let paragraph = Paragraph::new(render_tree(&tree))
-        .block(theme.panel_block("Topology View", false))
+        .block(theme.panel_block(text(lang, TextKey::CommunicationTopologyTitle), false))
         .scroll((state.scroll_offset(state.active_panel()), 0))
         .wrap(Wrap { trim: false });
     frame.render_widget(paragraph, sections[1]);

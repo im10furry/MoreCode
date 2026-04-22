@@ -3,11 +3,13 @@ use ratatui::text::Line;
 use ratatui::widgets::{Gauge, Paragraph, Wrap};
 use ratatui::Frame;
 
-use crate::app::AppState;
+use crate::app::{AppState, StreamMode};
+use crate::i18n::{text, TextKey};
 use crate::theme::TuiTheme;
 use crate::widget::progress_bar::progress_ratio;
 
 pub fn render(frame: &mut Frame, area: Rect, state: &AppState, theme: TuiTheme) {
+    let lang = state.language();
     let outer = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -30,38 +32,59 @@ pub fn render(frame: &mut Frame, area: Rect, state: &AppState, theme: TuiTheme) 
         .split(outer[1]);
 
     let agents = Paragraph::new(vec![
-        Line::from(format!("running: {}", state.running_agent_count())),
-        Line::from(format!("completed: {}", state.completed_agent_count())),
-        Line::from(format!("failed: {}", state.failed_agent_count())),
         Line::from(format!(
-            "pending approvals: {}",
+            "{} {}",
+            text(lang, TextKey::DashboardRunning),
+            state.running_agent_count()
+        )),
+        Line::from(format!(
+            "{} {}",
+            text(lang, TextKey::DashboardCompleted),
+            state.completed_agent_count()
+        )),
+        Line::from(format!(
+            "{} {}",
+            text(lang, TextKey::DashboardFailed),
+            state.failed_agent_count()
+        )),
+        Line::from(format!(
+            "{} {}",
+            text(lang, TextKey::DashboardPendingApprovals),
             state.pending_confirmation_count()
         )),
     ])
-    .block(theme.panel_block("Agents", false));
+    .block(theme.panel_block(text(lang, TextKey::DashboardAgents), false));
     frame.render_widget(agents, cards[0]);
 
     let progress = Gauge::default()
-        .block(theme.panel_block("Overall Progress", false))
+        .block(theme.panel_block(text(lang, TextKey::DashboardOverallProgress), false))
         .gauge_style(theme.accent())
         .ratio(progress_ratio(state.overall_progress()))
         .label(format!("{}%", state.overall_progress()));
     frame.render_widget(progress, cards[1]);
 
     let token_lines = vec![
-        Line::from(format!("total: {}", state.token_total())),
+        Line::from(format!(
+            "{} {}",
+            text(lang, TextKey::DashboardTotal),
+            state.token_total()
+        )),
         Line::from(match state.token_budget_total() {
-            Some(budget) => format!("budget: {budget}"),
-            None => "budget: -".to_string(),
+            Some(budget) => format!("{} {budget}", text(lang, TextKey::DashboardBudget)),
+            None => format!("{} -", text(lang, TextKey::DashboardBudget)),
         }),
-        Line::from(format!("samples: {}", state.token_history().len())),
+        Line::from(format!(
+            "{} {}",
+            text(lang, TextKey::DashboardSamples),
+            state.token_history().len()
+        )),
         Line::from(if state.has_budget_warning() {
-            "warning: >=80% budget".to_string()
+            text(lang, TextKey::DashboardWarningBudget).to_string()
         } else {
-            "warning: none".to_string()
+            text(lang, TextKey::DashboardWarningNone).to_string()
         }),
     ];
-    let tokens = Paragraph::new(token_lines).block(theme.panel_block("Tokens", false));
+    let tokens = Paragraph::new(token_lines).block(theme.panel_block(text(lang, TextKey::DashboardTokens), false));
     frame.render_widget(tokens, cards[2]);
 
     let topology = state
@@ -73,45 +96,43 @@ pub fn render(frame: &mut Frame, area: Rect, state: &AppState, theme: TuiTheme) 
         .map(|edge| Line::from(format!("{} -> {} [{}]", edge.from, edge.to, edge.kind)))
         .collect::<Vec<_>>();
     let topology = Paragraph::new(if topology.is_empty() {
-        vec![Line::from("No active edges yet")]
+        vec![Line::from(text(lang, TextKey::EmptyNoEdges))]
     } else {
         topology
     })
-    .block(theme.panel_block("Topology Preview", false))
+    .block(theme.panel_block(text(lang, TextKey::DashboardTopologyPreview), false))
     .wrap(Wrap { trim: false });
     frame.render_widget(topology, middle[0]);
 
-    let stream = if state.stream_mode().title() == "Confirmation" {
-        state
+    let stream = match state.stream_mode() {
+        StreamMode::Confirmation => state
             .confirmations()
             .iter()
             .rev()
             .take(5)
             .map(|entry| Line::from(format!("{}: {}", entry.agent_label, entry.status)))
-            .collect::<Vec<_>>()
-    } else if state.stream_mode().title() == "Code" {
-        state
+            .collect::<Vec<_>>(),
+        StreamMode::Code => state
             .code_stream()
             .iter()
             .rev()
             .take(5)
             .map(|entry| Line::from(format!("{} {}", entry.kind, entry.content)))
-            .collect::<Vec<_>>()
-    } else {
-        state
+            .collect::<Vec<_>>(),
+        StreamMode::Progress => state
             .tasks()
             .iter()
             .rev()
             .take(5)
             .map(|task| Line::from(format!("{} {}%", task.agent_type, task.progress_percent)))
-            .collect::<Vec<_>>()
+            .collect::<Vec<_>>(),
     };
     let stream = Paragraph::new(if stream.is_empty() {
-        vec![Line::from("No stream events yet")]
+        vec![Line::from(text(lang, TextKey::EmptyNoStream))]
     } else {
         stream
     })
-    .block(theme.panel_block("Current Stream", false))
+    .block(theme.panel_block(text(lang, TextKey::DashboardCurrentStream), false))
     .wrap(Wrap { trim: false });
     frame.render_widget(stream, middle[1]);
 
@@ -123,11 +144,11 @@ pub fn render(frame: &mut Frame, area: Rect, state: &AppState, theme: TuiTheme) 
         .map(|entry| Line::from(format!("[{}] {}", entry.level.label(), entry.message)))
         .collect::<Vec<_>>();
     let logs = Paragraph::new(if logs.is_empty() {
-        vec![Line::from("No logs yet")]
+        vec![Line::from(text(lang, TextKey::EmptyNoLogs))]
     } else {
         logs.into_iter().rev().collect()
     })
-    .block(theme.panel_block("Recent Logs", false))
+    .block(theme.panel_block(text(lang, TextKey::DashboardRecentLogs), false))
     .wrap(Wrap { trim: false });
     frame.render_widget(logs, outer[2]);
 }

@@ -1,5 +1,5 @@
 import React from 'react'
-import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom'
+import { BrowserRouter as Router, Routes, Route, Link, NavLink, useLocation } from 'react-router-dom'
 import Runs from './pages/Runs'
 import Chat from './pages/Chat'
 

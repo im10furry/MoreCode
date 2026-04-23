@@ -1,5 +1,5 @@
 use std::fmt;
-use std::io::stdout;
+use std::io::{stdout, IsTerminal};
 use std::time::Duration;
 
 use crossterm::event::{DisableMouseCapture, EnableMouseCapture, EventStream};
@@ -76,6 +76,12 @@ impl Tui {
 
     pub fn set_tick_rate(&mut self, tick_rate: Duration) {
         self.tick_rate = tick_rate;
+    }
+
+    /// Returns `true` when stdout is attached to an interactive terminal that
+    /// can support raw mode, alternate screen, and mouse capture.
+    pub fn is_terminal_available() -> bool {
+        stdout().is_terminal()
     }
 
     pub fn draw<B>(&self, terminal: &mut Terminal<B>) -> Result<(), TuiError>

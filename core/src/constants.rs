@@ -26,7 +26,7 @@ mod tests {
         assert_eq!(SEND_TIMEOUT_MS, 30_000);
         assert_eq!(QUEUE_DEPTH_ALERT_PERCENT, 80);
         assert_eq!(MORECODE_ENV_PREFIX, "MORECODE_");
-        assert_eq!(GLOBAL_CONFIG_SUBDIR, ".config/morecode");
+        assert_eq!(GLOBAL_CONFIG_SUBDIR, ".morecode");
         assert_eq!(PROJECT_CONFIG_SUBDIR, ".morecode");
         assert_eq!(CONFIG_FILE_NAME, "config.toml");
         assert_eq!(CONFIG_EVENT_CHANNEL_CAPACITY, 32);

@@ -39,6 +39,17 @@ pub async fn execute(context: &AppContext, command: &TuiCommand) -> Result<Strin
 }
 
 pub async fn execute_run(context: &AppContext, command: &RunCommand) -> Result<String, String> {
+    if !mc_tui::Tui::is_terminal_available() {
+        eprintln!("TUI unavailable (no interactive terminal), falling back to CLI mode");
+        let options = super::workflow::WorkflowOptions {
+            plan_only: command.plan_only,
+            approval: command.approval,
+        };
+        let output =
+            super::workflow::execute_run(context, &command.request, options, None).await?;
+        return Ok(super::workflow::render_run_summary(&output));
+    }
+
     let (tui, handle) = Tui::new("MoreCode Run");
     let mut tui = tui;
     tui.set_tick_rate(std::time::Duration::from_millis(
@@ -66,10 +77,34 @@ pub async fn execute_run(context: &AppContext, command: &RunCommand) -> Result<S
     let worker = spawn_run_worker(context, handle.clone(), command.clone());
     let result = tui.run().await.map(|_| String::new());
     worker.abort();
-    result.map_err(|error| error.to_string())
+
+    match result {
+        Ok(output) => Ok(output),
+        Err(error) => {
+            let msg = error.to_string();
+            if msg.contains("Initial console modes not set") || msg.contains("terminal io failed")
+            {
+                eprintln!("TUI unavailable ({msg}), falling back to CLI mode");
+                let options = super::workflow::WorkflowOptions {
+                    plan_only: command.plan_only,
+                    approval: command.approval,
+                };
+                let output =
+                    super::workflow::execute_run(context, &command.request, options, None).await?;
+                Ok(super::workflow::render_run_summary(&output))
+            } else {
+                Err(msg)
+            }
+        }
+    }
 }
 
 pub async fn open_run(context: &AppContext, snapshot: RunSnapshot) -> Result<String, String> {
+    if !mc_tui::Tui::is_terminal_available() {
+        eprintln!("TUI unavailable (no interactive terminal), falling back to CLI mode");
+        return Ok(super::workflow::render_review(&snapshot));
+    }
+
     let (tui, _handle) = Tui::new("MoreCode Review");
     let mut tui = tui;
     tui.set_tick_rate(std::time::Duration::from_millis(
@@ -93,11 +128,20 @@ pub async fn open_run(context: &AppContext, snapshot: RunSnapshot) -> Result<Str
                 .join(CONFIG_FILE_NAME),
         );
     }
-    tui.app_mut().load_run(snapshot);
-    tui.run()
-        .await
-        .map(|_| String::new())
-        .map_err(|error| error.to_string())
+    tui.app_mut().load_run(snapshot.clone());
+    match tui.run().await {
+        Ok(_) => Ok(String::new()),
+        Err(error) => {
+            let msg = error.to_string();
+            if msg.contains("Initial console modes not set") || msg.contains("terminal io failed")
+            {
+                eprintln!("TUI unavailable ({msg}), falling back to CLI mode");
+                Ok(super::workflow::render_review(&snapshot))
+            } else {
+                Err(msg)
+            }
+        }
+    }
 }
 
 fn spawn_run_worker(

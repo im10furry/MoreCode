@@ -24,6 +24,7 @@ pub struct CodeChangeDraft {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CodeGenerationOutput {
+    #[serde(default = "default_summary")]
     pub summary: String,
     #[serde(default)]
     pub implementation_notes: Vec<String>,
@@ -33,6 +34,10 @@ pub struct CodeGenerationOutput {
     pub validation_steps: Vec<String>,
     #[serde(default)]
     pub risks: Vec<String>,
+}
+
+fn default_summary() -> String {
+    "Code generation summary not available".to_string()
 }
 
 impl CodeGenerationOutput {

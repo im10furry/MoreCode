@@ -27,7 +27,9 @@ pub struct Planner {
 
 #[derive(Debug, Clone, Deserialize)]
 struct PlannerLlmSummary {
+    #[serde(default)]
     summary: String,
+    #[serde(default)]
     review_focus: Vec<String>,
 }
 

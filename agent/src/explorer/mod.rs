@@ -31,11 +31,24 @@ pub struct Explorer {
 
 #[derive(Debug, Clone, Deserialize)]
 struct ExplorerLlmSummary {
+    #[serde(default = "default_project_summary")]
     project_summary: String,
+    #[serde(default = "default_architecture_name")]
     architecture_name: String,
+    #[serde(default)]
     architecture_description: String,
+    #[serde(default)]
     design_decisions: Vec<String>,
+    #[serde(default)]
     notable_patterns: Vec<String>,
+}
+
+fn default_project_summary() -> String {
+    "Project summary not available".to_string()
+}
+
+fn default_architecture_name() -> String {
+    "Unknown".to_string()
 }
 
 impl Explorer {

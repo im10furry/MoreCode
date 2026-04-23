@@ -23,8 +23,11 @@ pub struct Reviewer {
 
 #[derive(Debug, Clone, Deserialize)]
 struct ReviewerEnrichment {
+    #[serde(default)]
     summary: String,
+    #[serde(default)]
     verdict: ReviewVerdict,
+    #[serde(default)]
     additional_findings: Vec<ReviewFinding>,
 }
 

@@ -50,8 +50,11 @@ pub struct ImpactReport {
 
 #[derive(Debug, Clone, Deserialize)]
 struct ImpactLlmSummary {
+    #[serde(default)]
     compatibility_notes: Vec<String>,
+    #[serde(default)]
     recommendations: Vec<String>,
+    #[serde(default)]
     risk_assessment: Vec<RiskAssessment>,
 }
 

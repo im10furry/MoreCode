@@ -23,6 +23,12 @@ pub enum ReviewVerdict {
     Rejected,
 }
 
+impl Default for ReviewVerdict {
+    fn default() -> Self {
+        Self::Approved
+    }
+}
+
 impl ReviewVerdict {
     pub fn max(left: Self, right: Self) -> Self {
         if left >= right {

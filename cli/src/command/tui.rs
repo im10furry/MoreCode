@@ -39,17 +39,6 @@ pub async fn execute(context: &AppContext, command: &TuiCommand) -> Result<Strin
 }
 
 pub async fn execute_run(context: &AppContext, command: &RunCommand) -> Result<String, String> {
-    if !mc_tui::Tui::is_terminal_available() {
-        eprintln!("TUI unavailable (no interactive terminal), falling back to CLI mode");
-        let options = super::workflow::WorkflowOptions {
-            plan_only: command.plan_only,
-            approval: command.approval,
-        };
-        let output =
-            super::workflow::execute_run(context, &command.request, options, None).await?;
-        return Ok(super::workflow::render_run_summary(&output));
-    }
-
     let (tui, handle) = Tui::new("MoreCode Run");
     let mut tui = tui;
     tui.set_tick_rate(std::time::Duration::from_millis(
@@ -100,11 +89,6 @@ pub async fn execute_run(context: &AppContext, command: &RunCommand) -> Result<S
 }
 
 pub async fn open_run(context: &AppContext, snapshot: RunSnapshot) -> Result<String, String> {
-    if !mc_tui::Tui::is_terminal_available() {
-        eprintln!("TUI unavailable (no interactive terminal), falling back to CLI mode");
-        return Ok(super::workflow::render_review(&snapshot));
-    }
-
     let (tui, _handle) = Tui::new("MoreCode Review");
     let mut tui = tui;
     tui.set_tick_rate(std::time::Duration::from_millis(

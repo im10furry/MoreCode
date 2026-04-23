@@ -66,6 +66,12 @@ pub async fn execute_run(
     execute_run_with_recorder(context, request, options, sink, recorder).await
 }
 
+fn agent_config(agent_type: mc_core::AgentType, model_id: &str) -> AgentConfig {
+    let mut config = AgentConfig::for_agent_type(agent_type);
+    config.llm_config.model_id = model_id.to_string();
+    config
+}
+
 pub async fn execute_run_with_recorder(
     context: &AppContext,
     request: &str,
@@ -76,6 +82,7 @@ pub async fn execute_run_with_recorder(
     let llm = build_llm_provider(resolve_default_provider(&context.config.provider)?)?;
     let shared = SharedResources::new(context.project_root.clone(), llm);
     let task = build_task_description(request, &context.project_root);
+    let model_id = &context.config.agent.default_model;
 
     let run_dir_label = recorder.run_dir().display().to_string();
     emit(
@@ -98,7 +105,7 @@ pub async fn execute_run_with_recorder(
         RunEvent::StepStarted { step: understand },
     )?;
 
-    let explorer_ctx = Explorer::new(AgentConfig::for_agent_type(mc_core::AgentType::Explorer))
+    let explorer_ctx = Explorer::new(agent_config(mc_core::AgentType::Explorer, model_id))
         .build_context(&task, None, &shared)
         .await
         .map_err(|error| error.to_string())?
@@ -113,7 +120,7 @@ pub async fn execute_run_with_recorder(
             Some("Explorer".to_string()),
         ),
         async {
-            let report = Explorer::new(AgentConfig::for_agent_type(mc_core::AgentType::Explorer))
+            let report = Explorer::new(agent_config(mc_core::AgentType::Explorer, model_id))
                 .execute(&explorer_ctx)
                 .await
                 .map_err(|error| error.to_string())?;
@@ -145,8 +152,8 @@ pub async fn execute_run_with_recorder(
         .await
         .ok_or_else(|| "missing project context after explorer".to_string())?;
 
-    let impact_ctx = ImpactAnalyzer::new(AgentConfig::for_agent_type(
-        mc_core::AgentType::ImpactAnalyzer,
+    let impact_ctx = ImpactAnalyzer::new(agent_config(
+        mc_core::AgentType::ImpactAnalyzer, model_id,
     ))
     .build_context(&task, Some(project_context.clone()), &shared)
     .await
@@ -162,8 +169,8 @@ pub async fn execute_run_with_recorder(
             Some("ImpactAnalyzer".to_string()),
         ),
         async {
-            let report = ImpactAnalyzer::new(AgentConfig::for_agent_type(
-                mc_core::AgentType::ImpactAnalyzer,
+            let report = ImpactAnalyzer::new(agent_config(
+                mc_core::AgentType::ImpactAnalyzer, model_id,
             ))
             .execute(&impact_ctx)
             .await
@@ -209,7 +216,7 @@ pub async fn execute_run_with_recorder(
 
     let plan = RunStep::new("plan", "Plan", None, None);
     emit(&mut recorder, sink, RunEvent::StepStarted { step: plan })?;
-    let planner_ctx = Planner::new(AgentConfig::for_agent_type(mc_core::AgentType::Planner))
+    let planner_ctx = Planner::new(agent_config(mc_core::AgentType::Planner, model_id))
         .build_context(&task, Some(project_context.clone()), &shared)
         .await
         .map_err(|error| error.to_string())?
@@ -225,7 +232,7 @@ pub async fn execute_run_with_recorder(
             Some("Planner".to_string()),
         ),
         async {
-            let report = Planner::new(AgentConfig::for_agent_type(mc_core::AgentType::Planner))
+            let report = Planner::new(agent_config(mc_core::AgentType::Planner, model_id))
                 .execute(&planner_ctx)
                 .await
                 .map_err(|error| error.to_string())?;
@@ -290,7 +297,7 @@ pub async fn execute_run_with_recorder(
     let execute = RunStep::new("execute", "Execute", None, None);
     emit(&mut recorder, sink, RunEvent::StepStarted { step: execute })?;
 
-    let coder_ctx = Coder::new(AgentConfig::for_agent_type(mc_core::AgentType::Coder))
+    let coder_ctx = Coder::new(agent_config(mc_core::AgentType::Coder, model_id))
         .build_context(&task, Some(project_context.clone()), &shared)
         .await
         .map_err(|error| error.to_string())?
@@ -307,7 +314,7 @@ pub async fn execute_run_with_recorder(
             Some("Coder".to_string()),
         ),
         async {
-            let report = Coder::new(AgentConfig::for_agent_type(mc_core::AgentType::Coder))
+            let report = Coder::new(agent_config(mc_core::AgentType::Coder, model_id))
                 .execute(&coder_ctx)
                 .await
                 .map_err(|error| error.to_string())?;
@@ -347,7 +354,7 @@ pub async fn execute_run_with_recorder(
         RunEvent::StepStarted { step: review_root },
     )?;
 
-    let reviewer_ctx = Reviewer::new(AgentConfig::for_agent_type(mc_core::AgentType::Reviewer))
+    let reviewer_ctx = Reviewer::new(agent_config(mc_core::AgentType::Reviewer, model_id))
         .build_context(&task, Some(project_context.clone()), &shared)
         .await
         .map_err(|error| error.to_string())?
@@ -364,7 +371,7 @@ pub async fn execute_run_with_recorder(
             Some("Reviewer".to_string()),
         ),
         async {
-            let report = Reviewer::new(AgentConfig::for_agent_type(mc_core::AgentType::Reviewer))
+            let report = Reviewer::new(agent_config(mc_core::AgentType::Reviewer, model_id))
                 .execute(&reviewer_ctx)
                 .await
                 .map_err(|error| error.to_string())?;
@@ -440,7 +447,7 @@ pub async fn execute_run_with_recorder(
                 command: validation_command.clone(),
             },
         )?;
-        let tester_ctx = Tester::new(AgentConfig::for_agent_type(mc_core::AgentType::Tester))
+        let tester_ctx = Tester::new(agent_config(mc_core::AgentType::Tester, model_id))
             .build_context(&task, Some(project_context.clone()), &shared)
             .await
             .map_err(|error| error.to_string())?
@@ -457,7 +464,7 @@ pub async fn execute_run_with_recorder(
                 Some("Tester".to_string()),
             ),
             async {
-                let report = Tester::new(AgentConfig::for_agent_type(mc_core::AgentType::Tester))
+                let report = Tester::new(agent_config(mc_core::AgentType::Tester, model_id))
                     .execute(&tester_ctx)
                     .await
                     .map_err(|error| error.to_string())?;

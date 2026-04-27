@@ -816,7 +816,7 @@ fn looks_like_valid_api_key(value: &str) -> bool {
     if value.contains('_') {
         let prefix = value.split('_').next().unwrap_or("");
         if prefix.len() >= 2 && prefix.len() <= 6 && prefix.chars().all(|c| c.is_ascii_lowercase()) {
-            let rest = value.strip_prefix(&format!("{}_", prefix)).unwrap_or("");
+            let rest = value.strip_prefix(&format!("{prefix}_")).unwrap_or("");
             if rest.len() >= 20 && rest.chars().all(|c| c.is_ascii_hexdigit() || c == '-') {
                 return true;
             }

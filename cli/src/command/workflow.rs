@@ -1259,19 +1259,19 @@ fn replay_label(event: &RunEvent) -> String {
             status,
             ..
         } => {
-            format!("approval resolved: {approval_id} -> {:?}", status)
+            format!("approval resolved: {approval_id} -> {status:?}")
         }
         RunEvent::PatchProposed { patch } => format!("patch proposed: {}", patch.file_path),
         RunEvent::PatchResolved {
             patch_id, status, ..
-        } => format!("patch resolved: {patch_id} -> {:?}", status),
+        } => format!("patch resolved: {patch_id} -> {status:?}"),
         RunEvent::ArtifactWritten { artifact } => format!("artifact: {}", artifact.title),
         RunEvent::CommandStarted { command } => format!("command started: {}", command.command),
         RunEvent::CommandOutput { command_id, .. } => format!("command output: {command_id}"),
         RunEvent::CommandFinished {
             command_id, status, ..
-        } => format!("command finished: {command_id} -> {:?}", status),
-        RunEvent::RunFinished { status, .. } => format!("run finished: {:?}", status),
+        } => format!("command finished: {command_id} -> {status:?}"),
+        RunEvent::RunFinished { status, .. } => format!("run finished: {status:?}"),
         RunEvent::Error { message, .. } => format!("error: {message}"),
     }
 }

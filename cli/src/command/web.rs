@@ -1002,17 +1002,17 @@ fn event_summary(event: &RunEvent) -> String {
             approval_id,
             status,
             ..
-        } => format!("Approval {approval_id}: {:?}", status),
+        } => format!("Approval {approval_id}: {status:?}"),
         RunEvent::PatchProposed { patch } => format!("Patch proposed: {}", patch.file_path),
         RunEvent::PatchResolved {
             patch_id, status, ..
-        } => format!("Patch {patch_id}: {:?}", status),
+        } => format!("Patch {patch_id}: {status:?}"),
         RunEvent::ArtifactWritten { artifact } => format!("Artifact written: {}", artifact.title),
         RunEvent::CommandStarted { command } => format!("Command started: {}", command.command),
         RunEvent::CommandOutput { command_id, .. } => format!("Command output: {command_id}"),
         RunEvent::CommandFinished {
             command_id, status, ..
-        } => format!("Command {command_id}: {:?}", status),
+        } => format!("Command {command_id}: {status:?}"),
         RunEvent::RunFinished { summary, .. } => summary
             .clone()
             .unwrap_or_else(|| "Run finished".to_string()),

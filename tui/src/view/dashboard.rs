@@ -296,18 +296,18 @@ fn event_label(event: &mc_core::RunEventEnvelope) -> String {
             status,
             ..
         } => {
-            format!("approval {approval_id}: {:?}", status)
+            format!("approval {approval_id}: {status:?}")
         }
         mc_core::RunEvent::PatchProposed { patch } => format!("patch: {}", patch.file_path),
         mc_core::RunEvent::PatchResolved {
             patch_id, status, ..
-        } => format!("patch {patch_id}: {:?}", status),
+        } => format!("patch {patch_id}: {status:?}"),
         mc_core::RunEvent::ArtifactWritten { artifact } => format!("artifact: {}", artifact.title),
         mc_core::RunEvent::CommandStarted { command } => format!("cmd: {}", command.command),
         mc_core::RunEvent::CommandOutput { command_id, .. } => format!("cmd output: {command_id}"),
         mc_core::RunEvent::CommandFinished {
             command_id, status, ..
-        } => format!("cmd {command_id}: {:?}", status),
+        } => format!("cmd {command_id}: {status:?}"),
         mc_core::RunEvent::RunFinished { summary, .. } => summary
             .clone()
             .unwrap_or_else(|| "run finished".to_string()),

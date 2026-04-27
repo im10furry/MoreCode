@@ -467,7 +467,7 @@ impl App {
         } else {
             self.theme.muted()
         };
-        spans.push(Span::styled(format!("{} tokens", token_summary), token_style));
+        spans.push(Span::styled(format!("{token_summary} tokens"), token_style));
 
         let footer = Paragraph::new(Line::from(spans))
             .block(
@@ -536,7 +536,7 @@ impl App {
             } => {
                 self.push_log(
                     LogLevel::Info,
-                    format!("approval resolved: {approval_id} -> {:?}", status),
+                    format!("approval resolved: {approval_id} -> {status:?}"),
                 );
             }
             RunEvent::CommandStarted { command } => {
@@ -554,7 +554,7 @@ impl App {
                     } else {
                         LogLevel::Info
                     },
-                    format!("command {command_id} -> {:?} {:?}", status, exit_code),
+                    format!("command {command_id} -> {status:?} {exit_code:?}"),
                 );
             }
             RunEvent::RunFinished { summary, .. } => {

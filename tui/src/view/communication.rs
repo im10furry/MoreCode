@@ -152,17 +152,17 @@ fn event_summary(event: &mc_core::RunEvent) -> String {
             approval_id,
             status,
             ..
-        } => format!("{approval_id} {:?}", status),
+        } => format!("{approval_id} {status:?}"),
         mc_core::RunEvent::PatchProposed { patch } => patch.file_path.clone(),
         mc_core::RunEvent::PatchResolved {
             patch_id, status, ..
-        } => format!("{patch_id} {:?}", status),
+        } => format!("{patch_id} {status:?}"),
         mc_core::RunEvent::ArtifactWritten { artifact } => artifact.title.clone(),
         mc_core::RunEvent::CommandStarted { command } => command.command.clone(),
         mc_core::RunEvent::CommandOutput { command_id, .. } => command_id.clone(),
         mc_core::RunEvent::CommandFinished {
             command_id, status, ..
-        } => format!("{command_id} {:?}", status),
+        } => format!("{command_id} {status:?}"),
         mc_core::RunEvent::RunFinished { summary, .. } => {
             summary.clone().unwrap_or_else(|| "finished".to_string())
         }

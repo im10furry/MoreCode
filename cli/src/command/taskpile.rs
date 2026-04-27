@@ -4,77 +4,69 @@ use mc_daemon::{
     TaskPileSchedule, TaskPileService, TaskPileTask, TaskTarget,
 };
 
+use crate::cli::TaskpileCommand;
 use crate::init::AppContext;
 
-pub fn execute(args: &[String], ctx: &AppContext) -> String {
-    let service = TaskPileService::new(ctx.config.daemon.taskpile.clone(), ctx.cwd.clone());
-    if args.is_empty() {
-        return render_list(service.list_tasks());
-    }
-
-    match args[0].as_str() {
-        "list" => render_list(service.list_tasks()),
-        "show" => {
-            let Some(task_id) = args.get(1) else {
-                return "usage: morecode taskpile show <task_id>".to_string();
-            };
-            match service.get_task(task_id) {
-                Ok(task) => render_task(task),
-                Err(error) => error.to_string(),
-            }
-        }
-        "add" => {
-            let parsed = parse_new_task(args, ctx);
-            match parsed.and_then(|request| service.add_task(request).map_err(|error| error.to_string())) {
-                Ok(task) => format!(
+pub async fn execute(context: &AppContext, command: &TaskpileCommand) -> Result<String, String> {
+    let service = TaskPileService::new(context.config.daemon.taskpile.clone(), context.cwd.clone());
+    match command {
+        TaskpileCommand::List => render_list(service.list_tasks()),
+        TaskpileCommand::Show { task_id } => match service.get_task(task_id) {
+            Ok(task) => render_task(task),
+            Err(error) => Err(error.to_string()),
+        },
+        TaskpileCommand::Add {
+            instruction,
+            options,
+        } => {
+            let request = parse_new_task_request(instruction, options, context)?;
+            match service
+                .add_task(request)
+                .map_err(|error| error.to_string())
+            {
+                Ok(task) => Ok(format!(
                     "task queued\nid: {}\nstatus: {:?}\npriority: {:?}\nnext_run_at: {}\nstorage: {}",
                     task.id,
                     task.status,
                     task.priority,
                     format_optional_time(task.next_run_at),
                     service.state_path()
-                ),
-                Err(error) => error.to_string(),
+                )),
+                Err(error) => Err(error),
             }
         }
-        "claim" => match service.claim_next_due(Utc::now()) {
+        TaskpileCommand::Claim => match service.claim_next_due(Utc::now()) {
             Ok(Some(task)) => render_claim(task),
-            Ok(None) => "no due tasks".to_string(),
-            Err(error) => error.to_string(),
+            Ok(None) => Ok("no due tasks".to_string()),
+            Err(error) => Err(error.to_string()),
         },
-        "complete" => {
-            let Some(task_id) = args.get(1) else {
-                return "usage: morecode taskpile complete <task_id> [summary...]".to_string();
-            };
-            let summary = if args.len() > 2 {
-                args[2..].join(" ")
-            } else {
-                "completed".to_string()
-            };
+        TaskpileCommand::Complete {
+            task_id, summary,
+        } => {
+            let summary = summary.clone().unwrap_or_else(|| "completed".to_string());
             match service.complete_task(task_id, &summary) {
                 Ok(task) => render_task(task),
-                Err(error) => error.to_string(),
+                Err(error) => Err(error.to_string()),
             }
         }
-        "fail" => {
-            let Some(task_id) = args.get(1) else {
-                return "usage: morecode taskpile fail <task_id> [reason...]".to_string();
-            };
-            let reason = if args.len() > 2 {
-                args[2..].join(" ")
-            } else {
-                "failed".to_string()
-            };
+        TaskpileCommand::Fail { task_id, reason } => {
+            let reason = reason.clone().unwrap_or_else(|| "failed".to_string());
             match service.fail_task(task_id, &reason) {
                 Ok(task) => render_task(task),
-                Err(error) => error.to_string(),
+                Err(error) => Err(error.to_string()),
             }
         }
-        "pause" => mutate_single_task(args, "pause", |task_id| service.pause_task(task_id)),
-        "resume" => mutate_single_task(args, "resume", |task_id| service.resume_task(task_id)),
-        "cancel" => mutate_single_task(args, "cancel", |task_id| service.cancel_task(task_id)),
-        "stats" => match service.stats() {
-            Ok(stats) => format!(
+        TaskpileCommand::Pause { task_id } => {
+            mutate_single_result(service.pause_task(task_id))
+        }
+        TaskpileCommand::Resume { task_id } => {
+            mutate_single_result(service.resume_task(task_id))
+        }
+        TaskpileCommand::Cancel { task_id } => {
+            mutate_single_result(service.cancel_task(task_id))
+        }
+        TaskpileCommand::Stats => match service.stats() {
+            Ok(stats) => Ok(format!(
                 "taskpile stats\ntotal: {}\nqueued: {}\nrunning: {}\npaused: {}\ncompleted: {}\nfailed: {}\ncancelled: {}\nnext_due_at: {}\ncloud_ready: {}\nstorage: {}",
                 stats.total,
                 stats.queued,
@@ -86,26 +78,23 @@ pub fn execute(args: &[String], ctx: &AppContext) -> String {
                 format_optional_time(stats.next_due_at),
                 stats.cloud_ready,
                 stats.storage_path
-            ),
-            Err(error) => error.to_string(),
+            )),
+            Err(error) => Err(error.to_string()),
         },
-        "cloud-status" => {
+        TaskpileCommand::CloudStatus => {
             let status = service.cloud_status();
-            format!(
+            Ok(format!(
                 "taskpile cloud\nenabled: {}\nready: {}\nendpoint: {}\nproject_id: {}\nnote: {}",
                 status.enabled,
                 status.ready,
                 status.endpoint.unwrap_or_else(|| "<unset>".to_string()),
                 status.project_id.unwrap_or_else(|| "<unset>".to_string()),
                 status.note
-            )
+            ))
         }
-        "cloud-preview" => {
-            let Some(task_id) = args.get(1) else {
-                return "usage: morecode taskpile cloud-preview <task_id>".to_string();
-            };
+        TaskpileCommand::CloudPreview { task_id } => {
             match service.preview_cloud_payload(task_id) {
-                Ok(payload) => format!(
+                Ok(payload) => Ok(format!(
                     "cloud preview\ntask_id: {}\naccepted_at: {}\nendpoint: {}\nproject_id: {}\ntarget: {:?}\nnote: {}",
                     payload.task_id,
                     payload.accepted_at.to_rfc3339(),
@@ -113,29 +102,29 @@ pub fn execute(args: &[String], ctx: &AppContext) -> String {
                     payload.project_id.unwrap_or_else(|| "<unset>".to_string()),
                     payload.target,
                     payload.note
-                ),
-                Err(error) => error.to_string(),
+                )),
+                Err(error) => Err(error.to_string()),
             }
         }
-        _ => "usage: morecode taskpile [list|add|show|claim|complete|fail|pause|resume|cancel|stats|cloud-status|cloud-preview]".to_string(),
     }
 }
 
-fn mutate_single_task<F>(args: &[String], action: &str, mutator: F) -> String
-where
-    F: FnOnce(&str) -> Result<TaskPileTask, mc_daemon::TaskPileError>,
-{
-    let Some(task_id) = args.get(1) else {
-        return format!("usage: morecode taskpile {action} <task_id>");
-    };
-    match mutator(task_id) {
+fn mutate_single_result(
+    result: Result<TaskPileTask, mc_daemon::TaskPileError>,
+) -> Result<String, String> {
+    match result {
         Ok(task) => render_task(task),
-        Err(error) => error.to_string(),
+        Err(error) => Err(error.to_string()),
     }
 }
 
-fn parse_new_task(args: &[String], ctx: &AppContext) -> Result<NewTaskRequest, String> {
+fn parse_new_task_request(
+    instruction: &str,
+    options: &[String],
+    ctx: &AppContext,
+) -> Result<NewTaskRequest, String> {
     let mut request = NewTaskRequest {
+        instruction: instruction.to_string(),
         token_budget: ctx.config.daemon.taskpile.default_token_budget,
         isolation: IsolationProfile::parse(&ctx.config.daemon.taskpile.default_isolation_profile),
         cloud_endpoint: ctx.config.daemon.taskpile.cloud.endpoint.clone(),
@@ -143,18 +132,12 @@ fn parse_new_task(args: &[String], ctx: &AppContext) -> Result<NewTaskRequest, S
         ..NewTaskRequest::default()
     };
 
-    let mut instruction_parts = Vec::new();
-    for token in args.iter().skip(1) {
-        if let Some((key, value)) = token.split_once('=') {
-            apply_option(&mut request, key, value)?;
-        } else {
-            instruction_parts.push(token.clone());
-        }
+    for option in options {
+        let Some((key, value)) = option.split_once('=') else {
+            continue;
+        };
+        apply_option(&mut request, key, value)?;
     }
-    if instruction_parts.is_empty() {
-        return Err("usage: morecode taskpile add <instruction...> [priority=high] [schedule=manual|at:2026-04-20T10:00:00Z|interval:300] [target=local|cloud] [isolation=workspace-write] [budget=12000] [compression=balanced] [parallelism=1] [approval=auto] [tags=a,b] [title=custom] [model=name]".to_string());
-    }
-    request.instruction = instruction_parts.join(" ");
     Ok(request)
 }
 
@@ -232,9 +215,11 @@ fn parse_schedule(raw: &str) -> Result<TaskPileSchedule, String> {
     Err(format!("invalid schedule: {raw}"))
 }
 
-fn render_list(result: Result<Vec<TaskPileTask>, mc_daemon::TaskPileError>) -> String {
+fn render_list(
+    result: Result<Vec<TaskPileTask>, mc_daemon::TaskPileError>,
+) -> Result<String, String> {
     match result {
-        Ok(tasks) if tasks.is_empty() => "taskpile is empty".to_string(),
+        Ok(tasks) if tasks.is_empty() => Ok("taskpile is empty".to_string()),
         Ok(tasks) => {
             let mut lines = vec!["taskpile".to_string()];
             for task in tasks {
@@ -247,14 +232,14 @@ fn render_list(result: Result<Vec<TaskPileTask>, mc_daemon::TaskPileError>) -> S
                     task.title
                 ));
             }
-            lines.join("\n")
+            Ok(lines.join("\n"))
         }
-        Err(error) => error.to_string(),
+        Err(error) => Err(error.to_string()),
     }
 }
 
-fn render_task(task: TaskPileTask) -> String {
-    format!(
+fn render_task(task: TaskPileTask) -> Result<String, String> {
+    Ok(format!(
         "task\nid: {}\ntitle: {}\nstatus: {:?}\npriority: {:?}\nschedule: {:?}\ntarget: {:?}\nisolation: {}\nparallelism: {}\ntoken_budget: {}\nnext_run_at: {}\nattempts: {}/{}\nlast_error: {}\nsummary: {}\ntags: {}\ninstruction: {}",
         task.id,
         task.title,
@@ -276,11 +261,11 @@ fn render_task(task: TaskPileTask) -> String {
             task.tags.join(",")
         },
         task.instruction
-    )
+    ))
 }
 
-fn render_claim(task: TaskPileTask) -> String {
-    format!(
+fn render_claim(task: TaskPileTask) -> Result<String, String> {
+    Ok(format!(
         "claimed\nid: {}\nstatus: {:?}\npriority: {:?}\ntarget: {:?}\nisolation: {}\nparallelism: {}\nbudget: {}\nlease_expires_at: {}\ninstruction: {}",
         task.id,
         task.status,
@@ -291,7 +276,7 @@ fn render_claim(task: TaskPileTask) -> String {
         task.execution.token_controls.budget,
         format_optional_time(task.lease_expires_at),
         task.instruction
-    )
+    ))
 }
 
 fn short_id(id: &str) -> &str {

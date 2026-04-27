@@ -112,6 +112,7 @@ pub enum Command {
     Config(ConfigCommand),
     Doctor,
     Daemon(DaemonCommand),
+    Taskpile(TaskpileCommand),
     OtherCli,
     OtherCliAutoMigrate,
 }
@@ -127,6 +128,22 @@ pub enum MemoryCommand {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ConfigCommand {
     Show,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TaskpileCommand {
+    List,
+    Show { task_id: String },
+    Add { instruction: String, options: Vec<String> },
+    Claim,
+    Complete { task_id: String, summary: Option<String> },
+    Fail { task_id: String, reason: Option<String> },
+    Pause { task_id: String },
+    Resume { task_id: String },
+    Cancel { task_id: String },
+    Stats,
+    CloudStatus,
+    CloudPreview { task_id: String },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -161,6 +178,8 @@ impl Cli {
                     .next()
                     .ok_or_else(|| CliError("missing value for --project-root".into()))?;
                 project_root = Some(PathBuf::from(value));
+            } else if let Some(value) = arg.strip_prefix("--project-root=") {
+                project_root = Some(PathBuf::from(value));
             } else {
                 remaining.push(arg);
                 remaining.extend(args);
@@ -182,6 +201,7 @@ fn parse_command(args: &[String]) -> Result<Command, CliError> {
             request: None,
             run_id: None,
         })),
+        [cmd] if cmd == "--help" || cmd == "-h" => Err(CliError(usage())),
         [cmd, rest @ ..] if cmd == "run" => Ok(Command::Run(parse_run_command(rest)?)),
         [cmd, rest @ ..] if cmd == "review" => Ok(Command::Review(parse_review_command(rest)?)),
         [cmd, rest @ ..] if cmd == "replay" => Ok(Command::Replay(parse_replay_command(rest)?)),
@@ -205,6 +225,7 @@ fn parse_command(args: &[String]) -> Result<Command, CliError> {
         [cmd, sub] if cmd == "memory" => Ok(Command::Memory(parse_memory_command(sub)?)),
         [cmd, sub] if cmd == "config" => Ok(Command::Config(parse_config_command(sub)?)),
         [cmd, sub] if cmd == "daemon" => Ok(Command::Daemon(parse_daemon_command(sub)?)),
+        [cmd, rest @ ..] if cmd == "taskpile" => Ok(Command::Taskpile(parse_taskpile_command(rest)?)),
         _ => Err(CliError(usage())),
     }
 }
@@ -470,6 +491,54 @@ fn parse_daemon_command(sub: &str) -> Result<DaemonCommand, CliError> {
     }
 }
 
+fn parse_taskpile_command(args: &[String]) -> Result<TaskpileCommand, CliError> {
+    match args {
+        [] => Ok(TaskpileCommand::List),
+        [sub] if sub == "list" => Ok(TaskpileCommand::List),
+        [sub] if sub == "stats" => Ok(TaskpileCommand::Stats),
+        [sub] if sub == "claim" => Ok(TaskpileCommand::Claim),
+        [sub] if sub == "cloud-status" => Ok(TaskpileCommand::CloudStatus),
+        [sub, task_id] if sub == "show" => Ok(TaskpileCommand::Show { task_id: task_id.clone() }),
+        [sub, task_id] if sub == "pause" => Ok(TaskpileCommand::Pause { task_id: task_id.clone() }),
+        [sub, task_id] if sub == "resume" => Ok(TaskpileCommand::Resume { task_id: task_id.clone() }),
+        [sub, task_id] if sub == "cancel" => Ok(TaskpileCommand::Cancel { task_id: task_id.clone() }),
+        [sub, task_id] if sub == "cloud-preview" => Ok(TaskpileCommand::CloudPreview { task_id: task_id.clone() }),
+        [sub, task_id, rest @ ..] if sub == "complete" => Ok(TaskpileCommand::Complete {
+            task_id: task_id.clone(),
+            summary: join_args(rest),
+        }),
+        [sub, task_id, rest @ ..] if sub == "fail" => Ok(TaskpileCommand::Fail {
+            task_id: task_id.clone(),
+            reason: join_args(rest),
+        }),
+        [sub, rest @ ..] if sub == "add" => {
+            let mut instruction_parts = Vec::new();
+            let mut options = Vec::new();
+            for arg in rest {
+                if arg.contains('=') {
+                    options.push(arg.clone());
+                } else {
+                    instruction_parts.push(arg.clone());
+                }
+            }
+            let instruction = instruction_parts.join(" ");
+            if instruction.is_empty() {
+                return Err(CliError("taskpile add requires an instruction".into()));
+            }
+            Ok(TaskpileCommand::Add { instruction, options })
+        }
+        _ => Err(CliError(usage_taskpile())),
+    }
+}
+
+fn join_args(args: &[String]) -> Option<String> {
+    if args.is_empty() {
+        None
+    } else {
+        Some(args.join(" "))
+    }
+}
+
 fn usage() -> String {
     [
         "Usage:",
@@ -485,6 +554,27 @@ fn usage() -> String {
         "  morecode othercli",
         "  morecode othercli auto-migrate",
         "  morecode daemon status",
+        "  morecode taskpile [list|add|show|claim|complete|fail|pause|resume|cancel|stats|cloud-status|cloud-preview]",
+        "  morecode --help",
+    ]
+    .join("\n")
+}
+
+fn usage_taskpile() -> String {
+    [
+        "Usage: morecode taskpile [subcommand]",
+        "  list                          List all tasks",
+        "  add <instruction> [key=val]   Add a new task",
+        "  show <task_id>                Show task details",
+        "  claim                         Claim next due task",
+        "  complete <task_id> [summary]  Mark task completed",
+        "  fail <task_id> [reason]       Mark task failed",
+        "  pause <task_id>               Pause a task",
+        "  resume <task_id>              Resume a paused task",
+        "  cancel <task_id>              Cancel a task",
+        "  stats                         Show taskpile statistics",
+        "  cloud-status                  Show cloud connection status",
+        "  cloud-preview <task_id>       Preview cloud payload",
     ]
     .join("\n")
 }

@@ -398,7 +398,7 @@ impl GoogleProvider {
             .cloned()
             .unwrap_or_default()
             .into_iter()
-            .filter(|item| supports_generate_content(item))
+            .filter(supports_generate_content)
             .map(|item| {
                 let id = string_field(&item, "baseModelId")
                     .or_else(|| string_field(&item, "name").map(strip_model_prefix))

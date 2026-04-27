@@ -8,7 +8,7 @@ static ENCRYPTION_KEY: OnceLock<[u8; 32]> = OnceLock::new();
 
 pub fn init_encryption(key: &str) {
     let mut key_bytes = [0u8; 32];
-    let key_len = key.as_bytes().len();
+    let key_len = key.len();
     key_bytes[..key_len.min(32)].copy_from_slice(&key.as_bytes()[..key_len.min(32)]);
     // Ignore error if key is already set
     let _ = ENCRYPTION_KEY.set(key_bytes);

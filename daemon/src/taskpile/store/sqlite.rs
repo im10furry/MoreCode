@@ -24,7 +24,7 @@ impl SqliteTaskPileStore {
     pub fn new(root_dir: PathBuf) -> Self {
         // Create directory if it doesn't exist
         if let Err(e) = std::fs::create_dir_all(&root_dir) {
-            panic!("Failed to create storage directory: {}", e);
+            panic!("Failed to create storage directory: {e}");
         }
         
         let db_path = root_dir.join("taskpile.db");
@@ -154,15 +154,9 @@ impl TaskPileStorage for SqliteTaskPileStore {
                 },
             };
             
-            let tags = match serde_json::from_str(&row.get::<_, String>(7)?) {
-                Ok(t) => t,
-                Err(_) => vec![],
-            };
+            let tags: Vec<String> = serde_json::from_str(&row.get::<_, String>(7)?).unwrap_or_default();
             
-            let metadata = match serde_json::from_str(&row.get::<_, String>(8)?) {
-                Ok(m) => m,
-                Err(_) => std::collections::HashMap::new(),
-            };
+            let metadata: std::collections::HashMap<String, String> = serde_json::from_str(&row.get::<_, String>(8)?).unwrap_or_default();
             
             let created_at = match chrono::DateTime::parse_from_rfc3339(&row.get::<_, String>(9)?) {
                 Ok(t) => t.into(),

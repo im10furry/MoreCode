@@ -153,7 +153,7 @@ impl TaskPileSchedule {
                 let mut next = now;
                 // Limit to 7 days to avoid infinite loop
                 for _ in 0..7 {
-                    next = next + Duration::days(1);
+                    next += Duration::days(1);
                     let weekday = next.weekday();
                     if weekday != chrono::Weekday::Sat && weekday != chrono::Weekday::Sun {
                         return Some(next.with_hour(*hour).unwrap().with_minute(*minute).unwrap());
@@ -166,7 +166,7 @@ impl TaskPileSchedule {
                 let mut next = now;
                 // Limit to 7 days to avoid infinite loop
                 for _ in 0..7 {
-                    next = next + Duration::days(1);
+                    next += Duration::days(1);
                     let weekday = next.weekday();
                     if weekday == chrono::Weekday::Sat || weekday == chrono::Weekday::Sun {
                         return Some(next.with_hour(*hour).unwrap().with_minute(*minute).unwrap());

@@ -5,7 +5,22 @@
       "Bash(cargo test:*)",
       "Bash(npx tsc:*)",
       "Bash(npm install:*)",
-      "Bash(npx vite:*)"
+      "Bash(npx vite:*)",
+      "Bash(cargo run:*)",
+      "Bash(curl -s http://127.0.0.1:3000/api/runs)",
+      "Bash(curl -s -X POST http://127.0.0.1:3000/api/runs -H 'Content-Type: application/json' -d '{\"request\": \"list files in current directory\"}')",
+      "Bash(cargo build:*)",
+      "Bash(target/debug/morecode.exe web:*)",
+      "Bash(curl -s http://127.0.0.1:3001/api/runs)",
+      "Bash(curl -s -X POST http://127.0.0.1:3001/api/runs -H 'Content-Type: application/json' -d '{\"request\":\"list files\"}')",
+      "Bash(curl -s -X POST http://127.0.0.1:3001/api/runs -H 'Content-Type: application/json' -d '{}')",
+      "Bash(curl -s -X PUT http://127.0.0.1:3001/api/runs -H 'Content-Type: application/json' -d '{\"request\":\"test\"}')",
+      "Bash(kill %1)",
+      "Bash(taskkill /F /IM morecode.exe)",
+      "Bash(taskkill /F /IM \"morecode.exe\")",
+      "Bash(powershell -Command 'Get-Process | Where-Object { $_.ProcessName -eq '\\\\''morecode'\\\\'' } | Stop-Process -Force')",
+      "Bash(curl -s \"http://127.0.0.1:3002/api/runs\")",
+      "Bash(curl -s http://127.0.0.1:3003/api/runs)"
     ]
   }
 }

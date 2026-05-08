@@ -5,16 +5,34 @@ interface Message {
   role: 'user' | 'assistant' | 'system'
   content: string
   timestamp: Date
+  error?: boolean
+  errorReason?: string
 }
 
 function formatTime(date: Date): string {
-  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
 }
 
 function avatarChar(role: string): string {
   if (role === 'user') return 'U'
   if (role === 'assistant') return 'MC'
   return '!'
+}
+
+function usernameFor(role: string): string {
+  if (role === 'user') return 'You'
+  if (role === 'assistant') return 'MoreCode'
+  return 'System'
+}
+
+function isNetworkError(msg: string): { reason: string } | null {
+  const lower = msg.toLowerCase()
+  if (lower.includes('failed to fetch')) return { reason: 'ERR_CONNECTION_REFUSED' }
+  if (lower.includes('network')) return { reason: 'ERR_NETWORK' }
+  if (lower.includes('timeout')) return { reason: 'ERR_TIMEOUT' }
+  if (lower.includes('server returned 5')) return { reason: 'ERR_SERVER_ERROR' }
+  if (lower.includes('server returned 4')) return { reason: 'ERR_BAD_REQUEST' }
+  return null
 }
 
 function Chat() {
@@ -49,7 +67,10 @@ function Chat() {
         body: JSON.stringify({ request: userMessage.content }),
       })
 
-      if (!response.ok) throw new Error(`Server returned ${response.status}`)
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}))
+        throw new Error((errData as any).error || `Server returned ${response.status}`)
+      }
 
       const data = await response.json()
 
@@ -64,11 +85,17 @@ function Chat() {
 
       setMessages((prev) => [...prev, assistantMessage])
     } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to send message'
+      const netInfo = isNetworkError(msg)
+      const errorReason = netInfo ? `${netInfo.reason} — check backend service` : undefined
+
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'system',
-        content: err instanceof Error ? err.message : 'Failed to send message',
+        content: msg,
         timestamp: new Date(),
+        error: true,
+        errorReason,
       }
       setMessages((prev) => [...prev, errorMessage])
     } finally {
@@ -78,7 +105,24 @@ function Chat() {
 
   return (
     <div className="chat-container">
+      <div className="chat-header">
+        <div>
+          <div className="chat-header-title">Chat</div>
+          <div className="chat-header-subtitle">new session</div>
+        </div>
+        <div className="chat-header-actions">
+          <button type="button" className="icon-button" aria-label="Clear session">🗑</button>
+          <button type="button" className="icon-button" aria-label="More options">⋯</button>
+        </div>
+      </div>
+
       <div className="chat-messages">
+        {messages.length > 0 && (
+          <div className="chat-session-separator">
+            <span>{formatTime(messages[0].timestamp)} — session start</span>
+          </div>
+        )}
+
         {messages.length === 0 && (
           <div className="empty-state">
             <div className="empty-state-icon">{'>'}</div>
@@ -90,38 +134,34 @@ function Chat() {
         )}
 
         {messages.map((msg) => (
-          <div key={msg.id} className={`chat-msg ${msg.role}`}>
-            <div className="chat-msg-avatar">{avatarChar(msg.role)}</div>
-            <div>
-              <div className="chat-msg-bubble">
-                {msg.content}
+          <div key={msg.id} className={`chat-msg ${msg.role}${msg.error ? ' error' : ''}`}>
+            <div className="chat-msg-body">
+              <div className="chat-msg-header">
+                <div className={`chat-msg-avatar ${msg.role}`}>{avatarChar(msg.role)}</div>
+                <div className="chat-msg-meta">
+                  <span className="chat-msg-username">{usernameFor(msg.role)}</span>
+                  <span className="chat-msg-time">{formatTime(msg.timestamp)}</span>
+                </div>
               </div>
-              <div className="chat-msg-time">{formatTime(msg.timestamp)}</div>
+              <div className="chat-msg-text">{msg.content}</div>
+              {msg.error && msg.errorReason && (
+                <div className="chat-msg-reason">{msg.errorReason}</div>
+              )}
             </div>
           </div>
         ))}
 
         {loading && (
-          <div className="chat-msg assistant">
-            <div className="chat-msg-avatar" style={{ background: 'var(--accent-green)', color: '#111' }}>MC</div>
-            <div>
-              <div className="chat-msg-bubble" style={{
-                background: 'var(--bg-card)',
-                border: '1px solid var(--border-subtle)',
-                padding: 'var(--space-3) var(--space-5)',
-                borderRadius: 'var(--radius-md)',
-              }}>
-                <span className="loading" style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 'var(--space-3)',
-                  color: 'var(--text-tertiary)',
-                  fontSize: 'var(--text-sm)',
-                  height: 'auto',
-                }}>
-                  Processing
-                </span>
+          <div className="chat-msg assistant loading">
+            <div className="chat-msg-body">
+              <div className="chat-msg-header">
+                <div className="chat-msg-avatar assistant">MC</div>
+                <div className="chat-msg-meta">
+                  <span className="chat-msg-username">MoreCode</span>
+                  <span className="chat-msg-time">{formatTime(new Date())}</span>
+                </div>
               </div>
+              <div className="chat-msg-text">Processing</div>
             </div>
           </div>
         )}
@@ -130,7 +170,6 @@ function Chat() {
       </div>
 
       <form className="chat-input-area" onSubmit={handleSubmit}>
-        <span className="prompt-sign">$</span>
         <input
           type="text"
           value={input}
@@ -140,7 +179,7 @@ function Chat() {
           autoFocus
         />
         <button type="submit" disabled={loading || !input.trim()}>
-          {loading ? '...' : 'Run'}
+          ➤
         </button>
       </form>
     </div>

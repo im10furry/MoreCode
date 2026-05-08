@@ -1,9 +1,9 @@
-import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom'
+import { BrowserRouter as Router, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom'
 import Runs from './pages/Runs'
 import Chat from './pages/Chat'
 
 const navItems = [
-  { to: '/', label: 'Runs', icon: '\u25B8' },
+  { to: '/runs', label: 'Runs', icon: '\u25B8' },
   { to: '/chat', label: 'Chat', icon: '>' },
 ]
 
@@ -18,9 +18,7 @@ function Sidebar() {
       </div>
       <nav className="sidebar-nav">
         {navItems.map((item) => {
-          const isActive = item.to === '/'
-            ? location.pathname === '/' || location.pathname.startsWith('/runs')
-            : location.pathname.startsWith(item.to)
+          const isActive = location.pathname.startsWith(item.to)
           return (
             <Link
               key={item.to}
@@ -40,18 +38,40 @@ function Sidebar() {
   )
 }
 
+function StatusBar() {
+  return (
+    <div className="status-bar">
+      <div className="status-bar-left">
+        <span className="status-bar-item">
+          <span className="status-bar-dot online" />
+          connected
+        </span>
+        <span className="status-bar-item">MoreCode v1.0</span>
+      </div>
+      <div className="status-bar-right">
+        <span className="status-bar-item">localhost:3001</span>
+        <span className="status-bar-item">UTF-8</span>
+      </div>
+    </div>
+  )
+}
+
 function App() {
   return (
     <Router>
       <div className="app-shell">
-        <Sidebar />
-        <main className="app-main">
-          <Routes>
-            <Route path="/" element={<Runs />} />
-            <Route path="/chat" element={<Chat />} />
-            <Route path="/runs/:runId" element={<Runs />} />
-          </Routes>
-        </main>
+        <div className="app-body">
+          <Sidebar />
+          <main className="app-main">
+            <Routes>
+              <Route path="/" element={<Navigate to="/chat" replace />} />
+              <Route path="/chat" element={<Chat />} />
+              <Route path="/runs" element={<Runs />} />
+              <Route path="/runs/:runId" element={<Runs />} />
+            </Routes>
+          </main>
+        </div>
+        <StatusBar />
       </div>
     </Router>
   )

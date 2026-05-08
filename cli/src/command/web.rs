@@ -22,6 +22,7 @@ struct HttpRequest {
     method: String,
     path: String,
     query: HashMap<String, String>,
+    body: Vec<u8>,
 }
 
 struct HttpResponse {
@@ -66,6 +67,11 @@ impl HttpResponse {
             body: message.as_bytes().to_vec(),
             headers: Vec::new(),
         }
+    }
+
+    fn with_status(mut self, status_line: &'static str) -> Self {
+        self.status_line = status_line;
+        self
     }
 
     fn method_not_allowed() -> Self {
@@ -167,17 +173,22 @@ fn launch_run(
     let recorder =
         RunRecorder::create(&state.project_root, &request).map_err(|error| error.to_string())?;
     let run_id = recorder.snapshot().summary.run_id.clone();
+    let project_root = state.project_root.clone();
+    let fail_root = project_root.clone();
+    let fail_run_id = run_id.clone();
     tokio::spawn(async move {
-        let memory = match mc_memory::MemorySystem::new(&state.project_root).await {
+        let memory = match mc_memory::MemorySystem::new(&project_root).await {
             Ok(memory) => std::sync::Arc::new(memory),
             Err(error) => {
-                eprintln!("failed to initialize memory for web run: {error}");
+                let msg = error.to_string();
+                eprintln!("failed to initialize memory for web run: {msg}");
+                finalize_failed_run(&fail_root, &fail_run_id, &msg);
                 return;
             }
         };
         let context = AppContext {
-            cwd: state.project_root.clone(),
-            project_root: state.project_root.clone(),
+            cwd: project_root.clone(),
+            project_root,
             config: state.config.clone(),
             memory,
         };
@@ -185,9 +196,34 @@ fn launch_run(
             execute_run_with_recorder(&context, &request, options, None, recorder).await
         {
             eprintln!("web run failed: {error}");
+            finalize_failed_run(&context.project_root, &fail_run_id, &error);
         }
     });
     Ok(run_id)
+}
+
+fn finalize_failed_run(project_root: &std::path::Path, run_id: &str, error: &str) {
+    match RunRecorder::open(project_root, run_id) {
+        Ok(mut recorder) => {
+            let started_at = recorder.snapshot().summary.started_at;
+            let total_tokens = recorder.snapshot().summary.total_tokens;
+            let duration_ms = chrono::Utc::now()
+                .signed_duration_since(started_at)
+                .num_milliseconds()
+                .max(0) as u64;
+            let _ = recorder.emit(RunEvent::RunFinished {
+                status: mc_core::RunStatus::Failed,
+                summary: Some(format!("run failed before completion: {error}")),
+                total_tokens,
+                total_duration_ms: duration_ms,
+                review_verdict: None,
+                changed_files: vec![],
+            });
+        }
+        Err(e) => {
+            eprintln!("failed to finalize failed run {run_id}: {e}");
+        }
+    }
 }
 
 async fn handle_connection(mut stream: TcpStream, state: WebState) -> Result<(), String> {
@@ -212,16 +248,21 @@ async fn handle_connection(mut stream: TcpStream, state: WebState) -> Result<(),
 }
 
 async fn route_request(state: &WebState, request: HttpRequest) -> HttpResponse {
-    if request.method != "GET" {
-        return HttpResponse::method_not_allowed();
-    }
-
     let segments = request
         .path
         .trim_matches('/')
         .split('/')
         .filter(|segment| !segment.is_empty())
         .collect::<Vec<_>>();
+
+    // POST /api/runs — launch a new run with JSON body
+    if request.method == "POST" && segments.as_slice() == &["api", "runs"] {
+        return api_launch_run(state, &request.body);
+    }
+
+    if request.method != "GET" {
+        return HttpResponse::method_not_allowed();
+    }
 
     match segments.as_slice() {
         [] => HttpResponse::redirect("/runs".to_string()),
@@ -601,6 +642,48 @@ fn launch_response(state: &WebState, query: HashMap<String, String>) -> HttpResp
     }
 }
 
+fn api_launch_run(state: &WebState, body: &[u8]) -> HttpResponse {
+    let request_text: String = match serde_json::from_slice::<serde_json::Value>(body)
+        .ok()
+        .and_then(|value| value.get("request")?.as_str().map(ToOwned::to_owned))
+    {
+        Some(text) => text,
+        None => {
+            return HttpResponse::json(
+                serde_json::json!({ "error": "missing 'request' field in JSON body" })
+                    .to_string()
+                    .into_bytes(),
+            )
+            .with_status("400 Bad Request");
+        }
+    };
+    if request_text.trim().is_empty() {
+        return HttpResponse::json(
+            serde_json::json!({ "error": "request field is empty" })
+                .to_string()
+                .into_bytes(),
+        )
+        .with_status("400 Bad Request");
+    }
+    let options = WorkflowOptions {
+        plan_only: false,
+        approval: ApprovalMode::Auto,
+    };
+    match launch_run(state.clone(), request_text, options) {
+        Ok(run_id) => HttpResponse::json(
+            serde_json::json!({ "run_id": run_id, "status": "started" })
+                .to_string()
+                .into_bytes(),
+        ),
+        Err(error) => HttpResponse::json(
+            serde_json::json!({ "error": error })
+                .to_string()
+                .into_bytes(),
+        )
+        .with_status("500 Internal Server Error"),
+    }
+}
+
 fn api_runs_response(state: &WebState) -> HttpResponse {
     match run_store_from_state(state).list_summaries() {
         Ok(summaries) => HttpResponse::json(
@@ -781,7 +864,11 @@ async fn read_request(stream: &mut TcpStream) -> Result<Option<HttpRequest>, Str
         }
     }
 
-    let request_text = String::from_utf8_lossy(&buffer[..total]);
+    let header_end = buffer[..total]
+        .windows(4)
+        .position(|window| window == b"\r\n\r\n")
+        .unwrap_or(total);
+    let request_text = String::from_utf8_lossy(&buffer[..header_end]);
     let first_line = request_text
         .lines()
         .next()
@@ -790,10 +877,38 @@ async fn read_request(stream: &mut TcpStream) -> Result<Option<HttpRequest>, Str
     let method = parts.next().unwrap_or("GET").to_string();
     let target = parts.next().unwrap_or("/").to_string();
     let (path, query) = split_target(&target);
+
+    let mut body = Vec::new();
+    let mut content_length = 0usize;
+    for line in request_text.lines() {
+        if let Some(value) = line.strip_prefix("content-length:") {
+            content_length = value.trim().parse().unwrap_or(0);
+        } else if let Some(value) = line.strip_prefix("Content-Length:") {
+            content_length = value.trim().parse().unwrap_or(0);
+        }
+    }
+
+    let body_start = header_end + 4;
+    if body_start < total {
+        body.extend_from_slice(&buffer[body_start..total]);
+    }
+    while body.len() < content_length {
+        let mut chunk = vec![0u8; 8192.min(content_length - body.len())];
+        let read = stream
+            .read(&mut chunk)
+            .await
+            .map_err(|error| error.to_string())?;
+        if read == 0 {
+            break;
+        }
+        body.extend_from_slice(&chunk[..read]);
+    }
+
     Ok(Some(HttpRequest {
         method,
         path,
         query,
+        body,
     }))
 }
 

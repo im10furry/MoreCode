@@ -167,7 +167,7 @@ pub fn render(frame: &mut Frame, area: Rect, state: &AppState, theme: TuiTheme) 
     let logs_widget = Paragraph::new(if logs.is_empty() {
         vec![Line::from(text(lang, TextKey::EmptyNoLogs))]
     } else {
-        logs.into_iter().rev().collect()
+        logs.into_iter().collect()
     })
     .block(theme.panel_block(text(lang, TextKey::DashboardRecentLogs), false))
     .wrap(Wrap { trim: false });

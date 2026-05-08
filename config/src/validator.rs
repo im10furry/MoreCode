@@ -68,6 +68,16 @@ fn validate_coordinator(config: &AppConfig) -> Result<()> {
         "必须大于 0",
     )?;
     ensure(
+        config.coordinator.max_retries > 0,
+        "coordinator.max_retries",
+        "必须大于 0",
+    )?;
+    ensure(
+        config.coordinator.memory_stale_threshold_days > 0,
+        "coordinator.memory_stale_threshold_days",
+        "必须大于 0",
+    )?;
+    ensure(
         config.coordinator.llm_weight_multiplier > 0.0,
         "coordinator.llm_weight_multiplier",
         "必须大于 0",
@@ -140,7 +150,7 @@ fn validate_provider_default_exists(config: &AppConfig) -> Result<()> {
             .provider
             .has_provider(&config.provider.default_provider),
         "provider.default_provider",
-        "default_provider 蹇呴』鎸囧悜宸插畾涔夌殑 provider 鎴栧唴缃?preset",
+        "default_provider 必须指向已定义的 provider 或内置 preset",
     )
 }
 
@@ -261,21 +271,29 @@ fn validate_daemon(config: &AppConfig) -> Result<()> {
         "必须大于 0",
     )?;
     if let Some(quiet_hours) = &config.daemon.quiet_hours {
-        ensure(
-            quiet_hours.start_hour < 24,
-            "daemon.quiet_hours.start_hour",
-            "必须在 0 到 23 之间",
-        )?;
-        ensure(
-            quiet_hours.end_hour < 24,
-            "daemon.quiet_hours.end_hour",
-            "必须在 0 到 23 之间",
-        )?;
-        ensure(
-            quiet_hours.start_hour != quiet_hours.end_hour,
-            "daemon.quiet_hours",
-            "start_hour 与 end_hour 不能相同",
-        )?;
+        let start_set = quiet_hours.start_hour != u8::MAX;
+        let end_set = quiet_hours.end_hour != u8::MAX;
+        if start_set {
+            ensure(
+                quiet_hours.start_hour < 24,
+                "daemon.quiet_hours.start_hour",
+                "必须在 0 到 23 之间",
+            )?;
+        }
+        if end_set {
+            ensure(
+                quiet_hours.end_hour < 24,
+                "daemon.quiet_hours.end_hour",
+                "必须在 0 到 23 之间",
+            )?;
+        }
+        if start_set && end_set {
+            ensure(
+                quiet_hours.start_hour != quiet_hours.end_hour,
+                "daemon.quiet_hours",
+                "start_hour 与 end_hour 不能相同",
+            )?;
+        }
     }
     if let Some(daily_budget_usd) = config.daemon.daily_budget_usd {
         ensure(
@@ -289,6 +307,16 @@ fn validate_daemon(config: &AppConfig) -> Result<()> {
 
 fn validate_tui(config: &AppConfig) -> Result<()> {
     require_non_empty("tui.theme", &config.tui.theme)?;
+    require_non_empty("tui.language", &config.tui.language)?;
+    let language = config.tui.language.to_ascii_lowercase();
+    ensure(
+        matches!(
+            language.as_str(),
+            "auto" | "en" | "en-us" | "en_us" | "zh" | "zh-cn" | "zh_cn"
+        ),
+        "tui.language",
+        "language 必须是 auto/en/zh/zh-cn 之一",
+    )?;
     ensure(
         config.tui.max_log_lines > 0,
         "tui.max_log_lines",

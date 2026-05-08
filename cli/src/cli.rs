@@ -115,6 +115,7 @@ pub enum Command {
     Taskpile(TaskpileCommand),
     OtherCli,
     OtherCliAutoMigrate,
+    Help,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -201,7 +202,7 @@ fn parse_command(args: &[String]) -> Result<Command, CliError> {
             request: None,
             run_id: None,
         })),
-        [cmd] if cmd == "--help" || cmd == "-h" => Err(CliError(usage())),
+        [cmd] if cmd == "--help" || cmd == "-h" => Ok(Command::Help),
         [cmd, rest @ ..] if cmd == "run" => Ok(Command::Run(parse_run_command(rest)?)),
         [cmd, rest @ ..] if cmd == "review" => Ok(Command::Review(parse_review_command(rest)?)),
         [cmd, rest @ ..] if cmd == "replay" => Ok(Command::Replay(parse_replay_command(rest)?)),
@@ -515,7 +516,7 @@ fn parse_taskpile_command(args: &[String]) -> Result<TaskpileCommand, CliError> 
             let mut instruction_parts = Vec::new();
             let mut options = Vec::new();
             for arg in rest {
-                if arg.contains('=') {
+                if is_option_like(arg) {
                     options.push(arg.clone());
                 } else {
                     instruction_parts.push(arg.clone());
@@ -531,6 +532,27 @@ fn parse_taskpile_command(args: &[String]) -> Result<TaskpileCommand, CliError> 
     }
 }
 
+fn is_option_like(arg: &str) -> bool {
+    if arg.starts_with("--") {
+        return true;
+    }
+    if let Some((key, value)) = arg.split_once('=') {
+        if value.is_empty() {
+            return false;
+        }
+        let key = key.trim();
+        if key.is_empty() {
+            return false;
+        }
+        let first = key.chars().next().unwrap();
+        if !first.is_ascii_alphabetic() {
+            return false;
+        }
+        return key.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-');
+    }
+    false
+}
+
 fn join_args(args: &[String]) -> Option<String> {
     if args.is_empty() {
         None
@@ -539,7 +561,7 @@ fn join_args(args: &[String]) -> Option<String> {
     }
 }
 
-fn usage() -> String {
+pub fn usage() -> String {
     [
         "Usage:",
         "  morecode [--project-root PATH] run [--ui cli|tui] [--plan-only] [--json] [--approve auto|prompt|deny] <request>",

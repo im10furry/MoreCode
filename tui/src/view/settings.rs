@@ -67,12 +67,6 @@ pub fn render(frame: &mut Frame, area: Rect, state: &AppState, theme: TuiTheme) 
             text(lang, TextKey::SettingsItemMouse),
             yes_no(lang, state.mouse_support()).to_string(),
         ),
-        row(
-            selected == 4,
-            theme,
-            text(lang, TextKey::SettingsItemTheme),
-            theme.name().to_string(),
-        ),
         Line::from(""),
         Line::from(Span::styled(
             text(lang, TextKey::SettingsHint),

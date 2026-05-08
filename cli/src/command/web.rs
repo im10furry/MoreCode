@@ -152,7 +152,9 @@ async fn serve(
         let (stream, _) = listener.accept().await.map_err(|error| error.to_string())?;
         let state = state.clone();
         tokio::spawn(async move {
-            let _ = handle_connection(stream, state).await;
+            if let Err(error) = handle_connection(stream, state).await {
+                eprintln!("web connection error: {error}");
+            }
         });
     }
 }
@@ -167,7 +169,7 @@ fn launch_run(
     let run_id = recorder.snapshot().summary.run_id.clone();
     tokio::spawn(async move {
         let memory = match mc_memory::MemorySystem::new(&state.project_root).await {
-            Ok(memory) => memory,
+            Ok(memory) => std::sync::Arc::new(memory),
             Err(error) => {
                 eprintln!("failed to initialize memory for web run: {error}");
                 return;
@@ -651,22 +653,22 @@ async fn stream_run_events(
             .collect::<Vec<_>>();
 
         if pending.is_empty() {
-            stream
-                .write_all(b": ping\n\n")
-                .await
-                .map_err(|error| error.to_string())?;
+            if stream.write_all(b": ping\n\n").await.is_err() {
+                break;
+            }
         } else {
             for event in pending {
                 let payload = serde_json::to_string(&event).map_err(|error| error.to_string())?;
                 let line = format!("event: run\ndata: {payload}\n\n");
-                stream
-                    .write_all(line.as_bytes())
-                    .await
-                    .map_err(|error| error.to_string())?;
+                if stream.write_all(line.as_bytes()).await.is_err() {
+                    break;
+                }
                 last_sequence = event.sequence;
             }
         }
-        stream.flush().await.map_err(|error| error.to_string())?;
+        if stream.flush().await.is_err() {
+            break;
+        }
         if snapshot.summary.status.is_terminal() {
             break;
         }
@@ -746,6 +748,8 @@ fn run_store_from_state(state: &WebState) -> RunStore {
     RunStore::new(&state.project_root)
 }
 
+const MAX_REQUEST_HEADER_SIZE: usize = 65536;
+
 async fn read_request(stream: &mut TcpStream) -> Result<Option<HttpRequest>, String> {
     let mut buffer = vec![0u8; 8192];
     let mut total = 0usize;
@@ -768,8 +772,12 @@ async fn read_request(stream: &mut TcpStream) -> Result<Option<HttpRequest>, Str
         {
             break;
         }
+        if total >= MAX_REQUEST_HEADER_SIZE {
+            return Err("request header too large".to_string());
+        }
         if total == buffer.len() {
-            buffer.resize(buffer.len() * 2, 0);
+            let new_size = (buffer.len() * 2).min(MAX_REQUEST_HEADER_SIZE);
+            buffer.resize(new_size, 0);
         }
     }
 
@@ -875,88 +883,124 @@ fn layout_html(title: &str, body: String, auto_refresh_secs: Option<u64>) -> Str
             <meta charset=\"utf-8\">\
             <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\
             {refresh}\
-            <title>{title}</title>\
+            <title>MoreCode — {title}</title>\
             <style>\
                 :root {{\
-                    color-scheme: dark;\
-                    --bg: #0d0f12;\
-                    --bg-elevated: #14181d;\
-                    --bg-panel: rgba(22, 27, 33, 0.92);\
-                    --bg-soft: rgba(255,255,255,0.03);\
-                    --edge: rgba(255,255,255,0.08);\
-                    --edge-strong: rgba(255,255,255,0.18);\
-                    --text: #ece8df;\
-                    --muted: #9ca3af;\
-                    --accent: #d7c2a4;\
-                    --signal: #d97757;\
-                    --ok: #6fb8a5;\
-                    --warn: #d4ad66;\
-                    --danger: #ef7d7d;\
-                    --shadow: 0 28px 80px rgba(0,0,0,0.45);\
+                    --bg-root: #1e1e1e;\
+                    --bg-sidebar: #252526;\
+                    --bg-content: #1e1e1e;\
+                    --bg-card: #2d2d30;\
+                    --bg-dropdown: #3c3c3c;\
+                    --bg-hover: #2a2d2e;\
+                    --bg-active: #37373d;\
+                    --bg-input: #3c3c3c;\
+                    --bg-terminal: #0c0c0c;\
+                    --text-primary: rgba(255,255,255,0.90);\
+                    --text-secondary: rgba(255,255,255,0.70);\
+                    --text-tertiary: rgba(255,255,255,0.50);\
+                    --text-disabled: rgba(255,255,255,0.30);\
+                    --accent-blue: #007acc;\
+                    --accent-green: #4ec9b0;\
+                    --accent-yellow: #dcdcaa;\
+                    --accent-red: #f44747;\
+                    --accent-purple: #c586c0;\
+                    --accent-orange: #ce9178;\
+                    --border-subtle: rgba(255,255,255,0.06);\
+                    --border-default: rgba(255,255,255,0.08);\
+                    --border-visible: rgba(255,255,255,0.10);\
+                    --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'PingFang SC', 'Microsoft YaHei', sans-serif;\
+                    --font-mono: 'Cascadia Code', 'JetBrains Mono', 'Fira Code', 'Consolas', 'SF Mono', monospace;\
+                    --radius-sm: 3px;\
+                    --radius-md: 4px;\
+                    --radius-lg: 6px;\
                 }}\
-                * {{ box-sizing: border-box; }}\
+                * {{ margin:0; padding:0; box-sizing:border-box; }}\
                 body {{\
-                    margin: 0;\
-                    color: var(--text);\
-                    background: radial-gradient(circle at top left, rgba(215,194,164,0.08), transparent 28%),\
-                                radial-gradient(circle at top right, rgba(111,184,165,0.07), transparent 22%),\
-                                linear-gradient(180deg, #0d0f12 0%, #11151a 42%, #0a0c0f 100%);\
-                    font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;\
+                    background: var(--bg-content);\
+                    color: var(--text-primary);\
+                    font-family: var(--font-ui);\
+                    font-size: 13px;\
+                    line-height: 1.5;\
+                    -webkit-font-smoothing: antialiased;\
                 }}\
-                body::before {{\
-                    content: '';\
-                    position: fixed;\
-                    inset: 0;\
-                    pointer-events: none;\
-                    background-image: linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);\
-                    background-size: 28px 28px;\
-                    mask-image: linear-gradient(to bottom, rgba(0,0,0,0.7), transparent 82%);\
-                }}\
-                a {{ color: inherit; text-decoration: none; }}\
-                .shell {{ max-width: 1400px; margin: 0 auto; padding: 28px; display: grid; gap: 24px; }}\
-                .hero {{ display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(320px, 0.75fr); gap: 20px; align-items: start; }}\
-                .hero--compact {{ grid-template-columns: minmax(0, 1fr) auto; }}\
-                .hero__copy h1 {{ margin: 0; font-size: clamp(2rem, 5vw, 4.2rem); line-height: 0.92; letter-spacing: -0.04em; font-weight: 650; }}\
-                .hero__copy p {{ max-width: 70ch; color: var(--muted); font-size: 1rem; }}\
-                .hero__actions {{ display: flex; gap: 12px; align-items: center; }}\
-                .eyebrow {{ text-transform: uppercase; letter-spacing: 0.22em; font-size: 0.72rem; color: var(--accent); margin-bottom: 10px; }}\
-                .panel {{ background: linear-gradient(180deg, rgba(27,32,38,0.96), rgba(18,22,27,0.96)); border: 1px solid var(--edge); border-radius: 22px; box-shadow: var(--shadow); padding: 20px; backdrop-filter: blur(18px); }}\
-                .launch-form textarea {{ width: 100%; min-height: 140px; resize: vertical; padding: 16px; border-radius: 18px; border: 1px solid var(--edge); font: inherit; color: var(--text); background: rgba(255,255,255,0.04); }}\
-                .launch-form label {{ display: block; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.16em; color: var(--muted); margin-bottom: 8px; }}\
-                .launch-form select, .launch-form input[type='text'] {{ width: 100%; border-radius: 999px; border: 1px solid var(--edge); padding: 10px 14px; font: inherit; color: var(--text); background: rgba(255,255,255,0.04); }}\
-                .launch-form__row {{ display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 14px 0 18px; align-items: end; }}\
-                button, .button {{ display: inline-flex; align-items: center; justify-content: center; border-radius: 999px; padding: 12px 18px; border: 1px solid var(--edge-strong); background: linear-gradient(180deg, #2b3138, #1d232a); color: var(--text); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; text-transform: uppercase; letter-spacing: 0.12em; font-size: 0.76rem; }}\
-                .button--ghost {{ background: transparent; color: var(--muted); }}\
-                .section-head {{ display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 14px; }}\
-                .section-head h2, .section-head h3 {{ margin: 0; font-size: 1.2rem; }}\
-                .muted {{ color: var(--muted); }}\
-                .run-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }}\
-                .run-card {{ display: grid; gap: 10px; padding: 18px; border-radius: 20px; border: 1px solid var(--edge); background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01)); transition: transform .18s ease, border-color .18s ease, background .18s ease; }}\
-                .run-card:hover {{ transform: translateY(-4px); border-color: var(--edge-strong); background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02)); }}\
-                .run-card h3 {{ margin: 0; font-size: 1.3rem; line-height: 1.1; }}\
-                .run-card__meta {{ display: flex; justify-content: space-between; gap: 12px; font-family: 'Courier New', monospace; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); }}\
-                .chip {{ display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 6px 10px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08); font-family: 'Courier New', monospace; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.12em; }}\
-                .chip.running, .step.running {{ color: var(--warn); }}\
-                .chip.succeeded, .chip.accepted, .chip.approved, .chip.completed, .step.done {{ color: var(--ok); }}\
-                .chip.failed, .chip.rejected, .chip.error, .step.failed {{ color: var(--danger); }}\
-                .chip.waitingapproval, .chip.pending, .step.pending {{ color: var(--signal); }}\
-                .banner {{ padding: 14px 18px; border-radius: 18px; background: rgba(217,119,87,0.14); border: 1px solid rgba(217,119,87,0.28); }}\
-                .detail-grid {{ display: grid; grid-template-columns: minmax(0, 0.95fr) minmax(420px, 1.05fr); gap: 24px; }}\
-                .column {{ display: grid; gap: 24px; align-content: start; }}\
-                .step-list, .artifact-list {{ margin: 0; padding-left: 20px; display: grid; gap: 12px; }}\
-                .step-list li {{ padding: 14px 0; border-bottom: 1px dashed rgba(255,255,255,0.08); }}\
-                .step__title {{ font-weight: 700; display: block; }}\
-                .step__meta {{ font-family: 'Courier New', monospace; color: var(--muted); font-size: 0.8rem; }}\
-                .timeline {{ display: grid; gap: 12px; }}\
-                .timeline-item {{ padding: 12px 14px; border-left: 3px solid rgba(215,194,164,0.28); background: rgba(255,255,255,0.03); border-radius: 0 16px 16px 0; }}\
-                .timeline-item__meta {{ display: flex; justify-content: space-between; gap: 12px; font-family: 'Courier New', monospace; font-size: 0.74rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }}\
-                .patch-stack, .mini-card-stack {{ display: grid; gap: 16px; }}\
-                .patch-card pre, .mini-card pre {{ overflow: auto; padding: 16px; border-radius: 18px; background: #151a22; color: #eff2f6; font-family: 'Courier New', monospace; font-size: 0.84rem; line-height: 1.45; }}\
-                .mini-card {{ padding: 14px 0; border-bottom: 1px dashed rgba(255,255,255,0.08); }}\
-                .action-row {{ display: flex; gap: 10px; margin: 12px 0; flex-wrap: wrap; }}\
-                .action-row a {{ padding: 8px 12px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.03); font-family: 'Courier New', monospace; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.12em; }}\
-                textarea:focus, select:focus, .action-row a:hover, .button:hover, .run-card:focus-visible {{ outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px rgba(215,194,164,0.16); }}\
-                @media (max-width: 980px) {{ .hero, .detail-grid {{ grid-template-columns: 1fr; }} .shell {{ padding: 16px; }} }}\
+                ::-webkit-scrollbar {{ width:10px; }}\
+                ::-webkit-scrollbar-track {{ background:transparent; }}\
+                ::-webkit-scrollbar-thumb {{ background:rgba(255,255,255,0.12); border-radius:5px; border:3px solid transparent; background-clip:padding-box; }}\
+                ::-webkit-scrollbar-thumb:hover {{ background:rgba(255,255,255,0.25); border:2px solid transparent; }}\
+                ::selection {{ background:#264f78; color:#fff; }}\
+                :focus-visible {{ outline:1px solid var(--accent-blue); outline-offset:-1px; }}\
+                a {{ color:var(--accent-blue); text-decoration:none; }}\
+                a:hover {{ color:#58a6ff; }}\
+                code,pre {{ font-family:var(--font-mono); font-size:12px; }}\
+                code {{ background:var(--bg-card); color:#569cd6; padding:1px 4px; border-radius:var(--radius-sm); }}\
+                .shell {{ max-width:1200px; margin:0 auto; padding:24px; }}\
+                .header {{ background:var(--bg-card); border-bottom:1px solid var(--border-subtle); padding:8px 24px; display:flex; align-items:center; gap:12px; }}\
+                .header-logo {{ font-weight:700; font-size:14px; color:var(--accent-blue); }}\
+                .header-nav {{ display:flex; gap:4px; margin-left:auto; }}\
+                .header-nav a {{ padding:6px 12px; border-radius:var(--radius-sm); font-size:12px; color:var(--text-secondary); transition:background 0.1s; }}\
+                .header-nav a:hover,.header-nav a.active {{ background:var(--bg-active); color:var(--text-primary); text-decoration:none; }}\
+                .panel {{ background:var(--bg-card); border:1px solid var(--border-subtle); border-radius:var(--radius-md); margin-bottom:16px; overflow:hidden; }}\
+                .panel-header {{ display:flex; align-items:center; height:32px; padding:0 12px; font-size:11px; font-weight:600; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.5px; background:var(--bg-sidebar); border-bottom:1px solid var(--border-subtle); }}\
+                .panel-body {{ padding:12px; }}\
+                .muted {{ color:var(--text-tertiary); }}\
+                .run-grid {{ display:grid; grid-template-columns:repeat(auto-fill, minmax(300px,1fr)); gap:12px; }}\
+                .run-card {{ display:grid; gap:8px; padding:14px; border-radius:var(--radius-md); border:1px solid var(--border-subtle); background:var(--bg-card); cursor:pointer; transition:border-color 0.15s; color:inherit; }}\
+                .run-card:hover {{ border-color:var(--accent-blue); text-decoration:none; }}\
+                .run-card h3 {{ margin:0; font-size:14px; font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }}\
+                .run-card__meta {{ display:flex; justify-content:space-between; align-items:center; gap:8px; font-size:11px; color:var(--text-tertiary); }}\
+                .chip {{ display:inline-flex; align-items:center; gap:4px; padding:1px 6px; border-radius:var(--radius-sm); font-size:11px; font-weight:500; }}\
+                .chip.running {{ background:rgba(86,156,214,0.15); color:#569cd6; }}\
+                .chip.succeeded,.chip.accepted,.chip.approved,.chip.completed,.step.done {{ background:rgba(78,201,176,0.15); color:#4ec9b0; }}\
+                .chip.failed,.chip.rejected,.chip.error,.step.failed {{ background:rgba(244,71,71,0.15); color:#f44747; }}\
+                .chip.pending,.chip.queued {{ background:rgba(255,255,255,0.06); color:var(--text-tertiary); }}\
+                .chip.warn {{ background:rgba(220,220,170,0.15); color:#dcdcaa; }}\
+                .chip.skipped {{ background:rgba(255,255,255,0.04); color:var(--text-disabled); }}\
+                .chip.accent {{ background:rgba(0,122,204,0.15); color:var(--accent-blue); }}\
+                .step {{ display:flex; align-items:center; padding:6px 12px; gap:10px; font-size:12px; border-bottom:1px solid var(--border-subtle); }}\
+                .step:last-child {{ border-bottom:none; }}\
+                .step-icon {{ width:18px; font-family:var(--font-mono); text-align:center; flex-shrink:0; }}\
+                .step-body {{ flex:1; min-width:0; }}\
+                .step-title {{ color:var(--text-primary); }}\
+                .step-summary {{ color:var(--text-tertiary); font-size:11px; margin-top:1px; }}\
+                .step-tokens {{ font-family:var(--font-mono); font-size:11px; color:var(--text-tertiary); flex-shrink:0; }}\
+                .artifact {{ background:var(--bg-card); border-radius:var(--radius-sm); margin-top:6px; padding:8px 10px; }}\
+                .artifact pre {{ white-space:pre-wrap; color:var(--text-secondary); font-size:11px; line-height:1.5; }}\
+                .patch-block {{ background:var(--bg-content); border:1px solid var(--border-subtle); border-radius:var(--radius-sm); padding:10px; margin:6px 0; }}\
+                .patch-block pre {{ white-space:pre-wrap; font-family:var(--font-mono); font-size:11px; line-height:1.5; color:var(--text-primary); }}\
+                .patch-block .add {{ color:var(--accent-green); }}\
+                .patch-block .rem {{ color:var(--accent-red); }}\
+                .patch-block .ctx {{ color:var(--text-tertiary); }}\
+                .launch-form {{ display:flex; flex-direction:column; gap:10px; }}\
+                .launch-form textarea {{ width:100%; min-height:100px; resize:vertical; padding:10px 12px; border-radius:var(--radius-sm); border:1px solid var(--border-default); font:inherit; color:var(--text-primary); background:var(--bg-input); }}\
+                .launch-form textarea:focus {{ outline:none; border-color:var(--accent-blue); }}\
+                .launch-form button {{ align-self:flex-start; padding:8px 16px; border-radius:var(--radius-sm); border:none; background:var(--accent-blue); color:#fff; font-size:13px; cursor:pointer; }}\
+                .launch-form button:hover {{ background:#1a8ad4; }}\
+                .back-link {{ display:inline-flex; align-items:center; gap:4px; font-size:12px; color:var(--text-secondary); padding:4px 0; margin-bottom:12px; }}\
+                .back-link:hover {{ color:var(--text-primary); text-decoration:none; }}\
+                .token-bar {{ display:flex; gap:12px; flex-wrap:wrap; }}\
+                .token-card {{ text-align:center; background:var(--bg-card); border:1px solid var(--border-subtle); border-radius:var(--radius-md); padding:14px 18px; }}\
+                .token-card .token-val {{ font-family:var(--font-mono); font-size:20px; font-weight:600; color:var(--accent-blue); }}\
+                .token-card .token-label {{ font-size:11px; color:var(--text-tertiary); text-transform:uppercase; margin-top:2px; }}\
+                .empty-state {{ text-align:center; color:var(--text-tertiary); padding:40px; }}\
+                h1,h2,h3 {{ font-weight:600; }}\
+                h1 {{ font-size:16px; }}\
+                h2 {{ font-size:14px; }}\
+                h3 {{ font-size:13px; }}\
+                .banner {{ padding:10px 14px; border-radius:var(--radius-sm); background:rgba(86,156,214,0.12); border:1px solid rgba(86,156,214,0.22); color:var(--text-primary); font-size:12px; }}\
+                .detail-grid {{ display:grid; grid-template-columns:minmax(0,0.95fr) minmax(400px,1.05fr); gap:16px; }}\
+                .column {{ display:grid; gap:16px; align-content:start; }}\
+                .step-list {{ display:flex; flex-direction:column; }}\
+                .timeline {{ display:flex; flex-direction:column; gap:8px; }}\
+                .timeline-item {{ padding:8px 12px; border-left:2px solid var(--accent-blue); background:var(--bg-card); }}\
+                .timeline-item__meta {{ display:flex; justify-content:space-between; gap:8px; font-family:var(--font-mono); font-size:11px; color:var(--text-tertiary); }}\
+                .patch-stack,.mini-card-stack {{ display:flex; flex-direction:column; gap:12px; }}\
+                .patch-card pre,.mini-card pre {{ overflow:auto; padding:10px; border-radius:var(--radius-sm); background:var(--bg-content); color:var(--text-primary); font-family:var(--font-mono); font-size:11px; line-height:1.5; border:1px solid var(--border-subtle); }}\
+                .mini-card {{ padding:10px 0; border-bottom:1px solid var(--border-subtle); }}\
+                .action-row {{ display:flex; gap:8px; margin:8px 0; flex-wrap:wrap; }}\
+                .action-row a {{ padding:6px 10px; border-radius:var(--radius-sm); border:1px solid var(--border-visible); background:var(--bg-card); font-size:11px; color:var(--text-secondary); }}\
+                .action-row a:hover {{ border-color:var(--accent-blue); background:var(--bg-hover); color:var(--text-primary); text-decoration:none; }}\
+                textarea:focus,select:focus,.action-row a:hover {{ outline:none; border-color:var(--accent-blue); }}\
+                @media (max-width:980px) {{ .detail-grid {{ grid-template-columns:1fr; }} .shell {{ padding:16px; }} }}\
             </style>\
         </head>\
         <body>\

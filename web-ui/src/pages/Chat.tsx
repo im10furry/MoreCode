@@ -1,10 +1,20 @@
-import React, { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect } from 'react'
 
 interface Message {
   id: string
   role: 'user' | 'assistant' | 'system'
   content: string
   timestamp: Date
+}
+
+function formatTime(date: Date): string {
+  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+}
+
+function avatarChar(role: string): string {
+  if (role === 'user') return 'U'
+  if (role === 'assistant') return 'MC'
+  return '!'
 }
 
 function Chat() {
@@ -39,14 +49,16 @@ function Chat() {
         body: JSON.stringify({ request: userMessage.content }),
       })
 
-      if (!response.ok) throw new Error('Failed to send message')
+      if (!response.ok) throw new Error(`Server returned ${response.status}`)
 
       const data = await response.json()
 
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: `Run started: ${data.run_id}`,
+        content: data.run_id
+          ? `Run started: ${data.run_id}\nNavigate to Runs to view progress.`
+          : JSON.stringify(data, null, 2),
         timestamp: new Date(),
       }
 
@@ -64,39 +76,71 @@ function Chat() {
     }
   }
 
-  const formatTime = (date: Date) => {
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-  }
-
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 57px)' }}>
-      <div className="content" style={{ flex: 1 }}>
-        <div className="message-list">
-          {messages.length === 0 && (
-            <div style={{ textAlign: 'center', color: 'var(--text-secondary)', padding: '40px' }}>
-              <h2 style={{ marginBottom: '8px' }}>MoreCode Chat</h2>
-              <p>Send a message to start a new run</p>
+    <div className="chat-container">
+      <div className="chat-messages">
+        {messages.length === 0 && (
+          <div className="empty-state">
+            <div className="empty-state-icon">{'>'}</div>
+            <div className="empty-state-title">MoreCode Chat</div>
+            <div className="empty-state-hint">
+              Send a request to start a new run
             </div>
-          )}
-          {messages.map((msg) => (
-            <div key={msg.id} className={`message message-${msg.role}`}>
-              <div style={{ fontSize: '12px', opacity: 0.7 }}>{formatTime(msg.timestamp)}</div>
-              <div className="message-content">{msg.content}</div>
+          </div>
+        )}
+
+        {messages.map((msg) => (
+          <div key={msg.id} className={`chat-msg ${msg.role}`}>
+            <div className="chat-msg-avatar">{avatarChar(msg.role)}</div>
+            <div>
+              <div className="chat-msg-bubble">
+                {msg.content}
+              </div>
+              <div className="chat-msg-time">{formatTime(msg.timestamp)}</div>
             </div>
-          ))}
-          <div ref={messagesEndRef} />
-        </div>
+          </div>
+        ))}
+
+        {loading && (
+          <div className="chat-msg assistant">
+            <div className="chat-msg-avatar" style={{ background: 'var(--accent-green)', color: '#111' }}>MC</div>
+            <div>
+              <div className="chat-msg-bubble" style={{
+                background: 'var(--bg-card)',
+                border: '1px solid var(--border-subtle)',
+                padding: 'var(--space-3) var(--space-5)',
+                borderRadius: 'var(--radius-md)',
+              }}>
+                <span className="loading" style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 'var(--space-3)',
+                  color: 'var(--text-tertiary)',
+                  fontSize: 'var(--text-sm)',
+                  height: 'auto',
+                }}>
+                  Processing
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div ref={messagesEndRef} />
       </div>
-      <form className="input-area" onSubmit={handleSubmit}>
+
+      <form className="chat-input-area" onSubmit={handleSubmit}>
+        <span className="prompt-sign">$</span>
         <input
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="Type your message..."
+          placeholder="Describe what you want to build..."
           disabled={loading}
+          autoFocus
         />
         <button type="submit" disabled={loading || !input.trim()}>
-          {loading ? 'Sending...' : 'Send'}
+          {loading ? '...' : 'Run'}
         </button>
       </form>
     </div>

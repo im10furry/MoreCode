@@ -33,7 +33,7 @@ pub async fn execute(context: &AppContext, command: &TuiCommand) -> Result<Strin
         ui: crate::UiMode::Tui,
         plan_only: false,
         json: false,
-        approval: ApprovalMode::Prompt,
+        approval: ApprovalMode::Auto,
     };
     execute_run(context, &run_command).await
 }
@@ -50,9 +50,10 @@ pub async fn execute_run(context: &AppContext, command: &RunCommand) -> Result<S
         match language.as_str() {
             "zh" | "zh-cn" | "zh_cn" => state.set_language(Language::ZhCn),
             "en" | "en-us" | "en_us" => state.set_language(Language::En),
+            "auto" | "" => state.set_language(Language::detect()),
             _ => {}
         }
-        state.set_tick_rate_ms(context.config.tui.refresh_rate_ms);
+        state.set_tick_rate_ms(context.config.tui.refresh_rate_ms.max(16));
         state.set_max_log_entries(context.config.tui.max_log_lines);
         state.set_mouse_support(context.config.tui.mouse_support);
         state.set_settings_persist_path(
@@ -63,9 +64,17 @@ pub async fn execute_run(context: &AppContext, command: &RunCommand) -> Result<S
         );
     }
 
-    let worker = spawn_run_worker(context, handle.clone(), command.clone());
+    let mut worker_command = command.clone();
+    worker_command.approval = ApprovalMode::Auto;
+    let worker = spawn_run_worker(context, handle.clone(), worker_command);
+    let abort = worker.abort_handle();
     let result = tui.run().await.map(|_| String::new());
-    worker.abort();
+    if tokio::time::timeout(std::time::Duration::from_secs(2), worker)
+        .await
+        .is_err()
+    {
+        abort.abort();
+    }
 
     match result {
         Ok(output) => Ok(output),
@@ -100,9 +109,10 @@ pub async fn open_run(context: &AppContext, snapshot: RunSnapshot) -> Result<Str
         match language.as_str() {
             "zh" | "zh-cn" | "zh_cn" => state.set_language(Language::ZhCn),
             "en" | "en-us" | "en_us" => state.set_language(Language::En),
+            "auto" | "" => state.set_language(Language::detect()),
             _ => {}
         }
-        state.set_tick_rate_ms(context.config.tui.refresh_rate_ms);
+        state.set_tick_rate_ms(context.config.tui.refresh_rate_ms.max(16));
         state.set_max_log_entries(context.config.tui.max_log_lines);
         state.set_mouse_support(context.config.tui.mouse_support);
         state.set_settings_persist_path(
@@ -135,14 +145,8 @@ fn spawn_run_worker(
 ) -> JoinHandle<()> {
     let project_root = context.project_root.clone();
     let config = context.config.clone();
+    let memory = context.memory.clone();
     tokio::spawn(async move {
-        let memory = match mc_memory::MemorySystem::new(&project_root).await {
-            Ok(memory) => memory,
-            Err(error) => {
-                let _ = handle.log(LogLevel::Error, format!("memory: {error}"));
-                return;
-            }
-        };
         let context = AppContext {
             cwd: project_root.clone(),
             project_root,
@@ -158,7 +162,9 @@ fn spawn_run_worker(
         };
         if let Err(error) = execute_workflow(&context, &command.request, options, Some(&sink)).await
         {
-            let _ = handle.log(LogLevel::Error, error);
+            if handle.log(LogLevel::Error, &error).is_err() {
+                eprintln!("workflow error: {error}");
+            }
         }
     })
 }

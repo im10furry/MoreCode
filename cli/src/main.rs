@@ -32,6 +32,10 @@ async fn main() {
         Command::OtherCli => command::othercli::execute(&context).await,
         Command::OtherCliAutoMigrate => command::othercli::execute_auto_migrate(&context).await,
         Command::Taskpile(taskpile_command) => command::taskpile::execute(&context, taskpile_command).await,
+        Command::Help => {
+            println!("{}", cli::usage());
+            Ok(String::new())
+        }
     };
 
     match result {

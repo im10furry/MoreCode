@@ -305,9 +305,7 @@ impl App {
             AppEvent::Tick => Ok(()),
             AppEvent::Resize { width, height } => {
                 if width == 0 || height == 0 {
-                    return Err(TuiError::InvalidLayout(
-                        "terminal size must be greater than zero".to_string(),
-                    ));
+                    return Ok(());
                 }
                 self.state.terminal_size = (width, height);
                 Ok(())
@@ -1043,7 +1041,7 @@ impl App {
     }
 
     fn settings_len(&self) -> usize {
-        5
+        4
     }
 
     fn settings_select_prev(&mut self) {
@@ -1214,7 +1212,7 @@ impl App {
         button: MouseButton,
     ) -> Result<(), TuiError> {
         let line = row.saturating_sub(content.y).saturating_sub(1) as usize;
-        if line > 4 {
+        if line >= self.settings_len() {
             return Ok(());
         }
         self.state.active_panel = Panel::Settings;
@@ -1327,7 +1325,7 @@ impl App {
     }
 
     fn resolve_current_approval(&mut self, approved: bool) -> Result<(), TuiError> {
-        let Some(snapshot) = self.state.run_snapshot.clone() else {
+        let Some(snapshot) = &self.state.run_snapshot else {
             return Ok(());
         };
         if snapshot.summary.approvals.is_empty() {
@@ -1370,7 +1368,7 @@ impl App {
     }
 
     fn resolve_current_patch(&mut self, accepted: bool) -> Result<(), TuiError> {
-        let Some(snapshot) = self.state.run_snapshot.clone() else {
+        let Some(snapshot) = &self.state.run_snapshot else {
             return Ok(());
         };
         if snapshot.summary.patches.is_empty() {

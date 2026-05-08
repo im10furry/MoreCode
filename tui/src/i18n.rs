@@ -11,10 +11,18 @@ impl Language {
             .unwrap_or_default()
             .to_ascii_lowercase();
         if locale.starts_with("zh") {
-            Self::ZhCn
-        } else {
-            Self::En
+            return Self::ZhCn;
         }
+
+        #[cfg(windows)]
+        {
+            let userprofile = std::env::var("USERPROFILE").unwrap_or_default();
+            if userprofile.chars().any(|c| matches!(c, '\u{4E00}'..='\u{9FFF}')) {
+                return Self::ZhCn;
+            }
+        }
+
+        Self::En
     }
 
     pub const fn toggle(self) -> Self {

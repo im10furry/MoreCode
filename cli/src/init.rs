@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use mc_config::{AppConfig, ConfigLoader};
 use mc_memory::MemorySystem;
@@ -9,7 +10,7 @@ pub struct AppContext {
     pub cwd: PathBuf,
     pub project_root: PathBuf,
     pub config: AppConfig,
-    pub memory: MemorySystem,
+    pub memory: Arc<MemorySystem>,
 }
 
 impl AppContext {
@@ -26,9 +27,11 @@ impl AppContext {
             .load()
             .await
             .map_err(|error| error.to_string())?;
-        let memory = MemorySystem::new(&project_root)
-            .await
-            .map_err(|error| error.to_string())?;
+        let memory = Arc::new(
+            MemorySystem::new(&project_root)
+                .await
+                .map_err(|error| error.to_string())?,
+        );
 
         Ok(Self {
             cwd,

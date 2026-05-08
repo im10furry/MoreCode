@@ -921,8 +921,21 @@ fn push_tail(target: &mut String, chunk: &str) {
         target.push('\n');
     }
     target.push_str(chunk.trim());
-    let lines = target.lines().rev().take(40).collect::<Vec<_>>();
-    *target = lines.into_iter().rev().collect::<Vec<_>>().join("\n");
+    // Keep only the last 40 lines efficiently
+    let mut newline_count = 0usize;
+    let mut truncate_at = target.len();
+    for (i, ch) in target.char_indices().rev() {
+        if ch == '\n' {
+            newline_count += 1;
+            if newline_count >= 40 {
+                truncate_at = i;
+                break;
+            }
+        }
+    }
+    if truncate_at < target.len() {
+        *target = target[truncate_at + 1..].to_string();
+    }
 }
 
 #[cfg(test)]

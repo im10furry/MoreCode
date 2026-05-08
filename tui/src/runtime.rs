@@ -39,14 +39,14 @@ impl fmt::Display for AppExit {
 #[derive(Debug)]
 pub struct Tui {
     app: App,
-    update_rx: mpsc::UnboundedReceiver<TuiUpdate>,
+    update_rx: mpsc::Receiver<TuiUpdate>,
     tick_rate: Duration,
 }
 
 /// Sender used by the rest of the system to push updates into the TUI.
 #[derive(Debug, Clone)]
 pub struct TuiHandle {
-    update_tx: mpsc::UnboundedSender<TuiUpdate>,
+    update_tx: mpsc::Sender<TuiUpdate>,
 }
 
 impl Tui {
@@ -55,7 +55,7 @@ impl Tui {
     }
 
     pub fn from_app(app: App) -> (Self, TuiHandle) {
-        let (update_tx, update_rx) = mpsc::unbounded_channel();
+        let (update_tx, update_rx) = mpsc::channel(1024);
         (
             Self {
                 app,
@@ -170,8 +170,11 @@ impl Tui {
 impl TuiHandle {
     pub fn send(&self, update: TuiUpdate) -> Result<(), TuiError> {
         self.update_tx
-            .send(update)
-            .map_err(|_| TuiError::UpdateChannelClosed)
+            .try_send(update)
+            .map_err(|error| match error {
+                tokio::sync::mpsc::error::TrySendError::Closed(_) => TuiError::UpdateChannelClosed,
+                tokio::sync::mpsc::error::TrySendError::Full(_) => TuiError::UpdateChannelClosed,
+            })
     }
 
     pub fn control(&self, message: ControlMessage) -> Result<(), TuiError> {

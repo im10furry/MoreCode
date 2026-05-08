@@ -5,6 +5,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use chrono::Utc;
+use tokio::io::AsyncBufReadExt;
 use mc_agent::tester::framework::{
     derive_focus_filters, detect_framework, FrameworkDetectionContext,
 };
@@ -203,6 +204,7 @@ pub async fn execute_run_with_recorder(
         .await
         .ok_or_else(|| "missing impact report after analyzer".to_string())?;
 
+    let understand_tokens = sum_child_tokens(recorder.snapshot(), "understand");
     emit(
         &mut recorder,
         sink,
@@ -210,7 +212,7 @@ pub async fn execute_run_with_recorder(
             step_id: "understand".to_string(),
             status: StepStatus::Done,
             summary: Some("project scan and impact analysis finished".to_string()),
-            token_used: 0,
+            token_used: understand_tokens,
         },
     )?;
 
@@ -264,6 +266,7 @@ pub async fn execute_run_with_recorder(
         .await
         .ok_or_else(|| "missing execution plan after planner".to_string())?;
 
+    let plan_tokens = sum_child_tokens(recorder.snapshot(), "plan");
     emit(
         &mut recorder,
         sink,
@@ -275,7 +278,7 @@ pub async fn execute_run_with_recorder(
                 execution_plan.sub_tasks.len(),
                 execution_plan.parallel_groups.len()
             )),
-            token_used: 0,
+            token_used: plan_tokens,
         },
     )?;
 
@@ -437,7 +440,8 @@ pub async fn execute_run_with_recorder(
             created_at: Utc::now(),
             responded_at: None,
         },
-    )?;
+    )
+    .await?;
 
     let test_result = if tests_approved {
         emit(
@@ -556,6 +560,7 @@ pub async fn execute_run_with_recorder(
         None
     };
 
+    let execute_tokens = sum_child_tokens(recorder.snapshot(), "execute");
     emit(
         &mut recorder,
         sink,
@@ -566,7 +571,7 @@ pub async fn execute_run_with_recorder(
                 "{} draft file(s) prepared",
                 coder_output.changes.len()
             )),
-            token_used: 0,
+            token_used: execute_tokens,
         },
     )?;
 
@@ -588,7 +593,8 @@ pub async fn execute_run_with_recorder(
             created_at: Utc::now(),
             responded_at: None,
         },
-    )?;
+    )
+    .await?;
     let patch_status = if patch_decision {
         PatchStatus::Accepted
     } else {
@@ -612,6 +618,7 @@ pub async fn execute_run_with_recorder(
             },
         )?;
     }
+    let review_tokens = sum_child_tokens(recorder.snapshot(), "review");
     emit(
         &mut recorder,
         sink,
@@ -619,7 +626,7 @@ pub async fn execute_run_with_recorder(
             step_id: "review".to_string(),
             status: StepStatus::Done,
             summary: Some(format!("review verdict: {:?}", review_report.verdict)),
-            token_used: 0,
+            token_used: review_tokens,
         },
     )?;
 
@@ -971,7 +978,23 @@ fn record_patch_artifacts(
     Ok(())
 }
 
-fn request_approval(
+fn sum_child_tokens(snapshot: &mc_core::RunSnapshot, parent_step_id: &str) -> u64 {
+    let prefix = format!("{parent_step_id}.");
+    snapshot
+        .events
+        .iter()
+        .filter_map(|envelope| match &envelope.event {
+            RunEvent::StepFinished { step_id, token_used, .. }
+                if step_id.starts_with(&prefix) =>
+            {
+                Some(*token_used)
+            }
+            _ => None,
+        })
+        .sum()
+}
+
+async fn request_approval(
     recorder: &mut RunRecorder,
     sink: Option<&dyn RunEventSink>,
     policy: ApprovalMode,
@@ -991,7 +1014,7 @@ fn request_approval(
             Some("reject".to_string()),
             Some("blocked by approval policy".to_string()),
         ),
-        ApprovalMode::Prompt => prompt_for_approval(recorder.snapshot(), &approval_id)?,
+        ApprovalMode::Prompt => prompt_for_approval(recorder.snapshot(), &approval_id).await?,
     };
 
     emit(
@@ -1008,7 +1031,7 @@ fn request_approval(
     Ok(status == ApprovalStatus::Approved)
 }
 
-fn prompt_for_approval(
+async fn prompt_for_approval(
     snapshot: &RunSnapshot,
     approval_id: &str,
 ) -> Result<(ApprovalStatus, Option<String>, Option<String>), String> {
@@ -1044,8 +1067,9 @@ fn prompt_for_approval(
     io::stdout().flush().map_err(|error| error.to_string())?;
 
     let mut line = String::new();
-    io::stdin()
+    tokio::io::BufReader::new(tokio::io::stdin())
         .read_line(&mut line)
+        .await
         .map_err(|error| error.to_string())?;
     let choice = line.trim().to_ascii_lowercase();
     if choice.is_empty() {

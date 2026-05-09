@@ -824,6 +824,7 @@ fn build_llm_provider(resolved: ResolvedProviderEntry) -> Result<Arc<dyn LlmProv
                 default_headers: resolved.headers,
                 request_timeout: Duration::from_secs(120),
                 stream_buffer_size: 64,
+                supports_structured_output: resolved.supports_structured_output,
             })
             .map_err(|error| error.to_string())?;
             Ok(Arc::new(provider))

@@ -32,6 +32,7 @@ pub struct OpenAiProvider {
     active_requests: Arc<RwLock<HashMap<String, CancellationToken>>>,
     request_timeout: Duration,
     stream_buffer_size: usize,
+    supports_structured_output: bool,
 }
 
 impl OpenAiProvider {
@@ -47,6 +48,7 @@ impl OpenAiProvider {
             default_headers: HashMap::new(),
             request_timeout: Duration::from_secs(120),
             stream_buffer_size: 64,
+            supports_structured_output: true,
         })
     }
 
@@ -79,6 +81,7 @@ impl OpenAiProvider {
             active_requests: Arc::new(RwLock::new(HashMap::new())),
             request_timeout: config.request_timeout,
             stream_buffer_size: config.stream_buffer_size,
+            supports_structured_output: config.supports_structured_output,
         })
     }
 
@@ -161,8 +164,10 @@ impl OpenAiProvider {
                     .collect::<Vec<_>>(),
             );
         }
-        if let Some(response_format) = &request.response_format {
-            body["response_format"] = response_format_to_openai_json(response_format);
+        if self.supports_structured_output {
+            if let Some(response_format) = &request.response_format {
+                body["response_format"] = response_format_to_openai_json(response_format);
+            }
         }
 
         Ok(body)

@@ -42,6 +42,8 @@ pub struct ProviderEntry {
     pub default_model: Option<String>,
     #[serde(default)]
     pub headers: HashMap<String, String>,
+    #[serde(default)]
+    pub supports_structured_output: Option<bool>,
 }
 
 impl Default for ProviderEntry {
@@ -53,6 +55,7 @@ impl Default for ProviderEntry {
             api_key_env: None,
             default_model: None,
             headers: HashMap::new(),
+            supports_structured_output: None,
         }
     }
 }
@@ -81,6 +84,25 @@ pub struct ResolvedProviderEntry {
     pub api_key_env: Option<String>,
     pub default_model: Option<String>,
     pub headers: HashMap<String, String>,
+    pub supports_structured_output: bool,
+}
+
+impl ResolvedProviderEntry {
+    fn resolve_supports_structured_output(
+        entry: &ProviderEntry,
+        preset: Option<BuiltinProviderPreset>,
+    ) -> bool {
+        // User explicit setting wins
+        if let Some(value) = entry.supports_structured_output {
+            return value;
+        }
+        // Fall back to preset default
+        if let Some(preset) = preset {
+            return preset.definition().supports_structured_output;
+        }
+        // Ultimate default
+        true
+    }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
@@ -102,6 +124,7 @@ pub struct PartialProviderEntry {
     pub api_key_env: Option<String>,
     pub default_model: Option<String>,
     pub headers: Option<HashMap<String, String>>,
+    pub supports_structured_output: Option<bool>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -111,6 +134,7 @@ pub(crate) struct BuiltinProviderDefinition {
     base_url: Option<&'static str>,
     default_model: Option<&'static str>,
     api_key_env: Option<&'static str>,
+    supports_structured_output: bool,
 }
 
 impl ProviderConfig {
@@ -212,6 +236,9 @@ impl ProviderEntry {
                 self.headers.insert(header, header_value);
             }
         }
+        if let Some(value) = partial.supports_structured_output {
+            self.supports_structured_output = Some(value);
+        }
     }
 
     pub fn from_builtin_preset(preset: BuiltinProviderPreset) -> Self {
@@ -223,6 +250,7 @@ impl ProviderEntry {
             api_key_env: definition.api_key_env.map(ToOwned::to_owned),
             default_model: definition.default_model.map(ToOwned::to_owned),
             headers: HashMap::new(),
+            supports_structured_output: None,
         }
     }
 
@@ -230,8 +258,11 @@ impl ProviderEntry {
         &self,
         provider_name_hint: Option<&str>,
     ) -> Option<BuiltinProviderPreset> {
-        BuiltinProviderPreset::from_key(&self.provider_type)
-            .or_else(|| provider_name_hint.and_then(BuiltinProviderPreset::from_key))
+        // Provider name (e.g. "deepseek") is more specific than implementation type
+        // (e.g. "openai-compat"), so check it first.
+        provider_name_hint
+            .and_then(BuiltinProviderPreset::from_key)
+            .or_else(|| BuiltinProviderPreset::from_key(&self.provider_type))
     }
 
     pub fn normalized_provider_type(&self) -> String {
@@ -272,6 +303,8 @@ impl ProviderEntry {
             .map(|value| self.with_builtin_preset(value))
             .unwrap_or_else(|| self.clone());
         let api_key = effective.resolved_api_key();
+        let supports_structured_output =
+            ResolvedProviderEntry::resolve_supports_structured_output(self, preset);
 
         ResolvedProviderEntry {
             name: provider_name,
@@ -282,6 +315,7 @@ impl ProviderEntry {
             api_key_env: effective.api_key_env,
             default_model: effective.default_model,
             headers: effective.headers,
+            supports_structured_output,
         }
     }
 }
@@ -319,6 +353,9 @@ impl PartialProviderEntry {
                 (None, Some(overlay)) => Some(overlay),
                 (None, None) => None,
             },
+            supports_structured_output: other
+                .supports_structured_output
+                .or(self.supports_structured_output),
         }
     }
 }
@@ -347,6 +384,7 @@ impl BuiltinProviderPreset {
                 base_url: Some("https://api.openai.com/v1"),
                 default_model: Some("gpt-4o-mini"),
                 api_key_env: Some("OPENAI_API_KEY"),
+                supports_structured_output: true,
             },
             Self::DeepSeek => BuiltinProviderDefinition {
                 preset: self,
@@ -354,6 +392,7 @@ impl BuiltinProviderPreset {
                 base_url: Some("https://api.deepseek.com/v1"),
                 default_model: Some("deepseek-chat"),
                 api_key_env: Some("DEEPSEEK_API_KEY"),
+                supports_structured_output: false,
             },
             Self::Zhipu => BuiltinProviderDefinition {
                 preset: self,
@@ -361,6 +400,7 @@ impl BuiltinProviderPreset {
                 base_url: Some("https://open.bigmodel.cn/api/paas/v4"),
                 default_model: Some("glm-4.5"),
                 api_key_env: Some("ZHIPU_API_KEY"),
+                supports_structured_output: true,
             },
             Self::Tongyi => BuiltinProviderDefinition {
                 preset: self,
@@ -368,6 +408,7 @@ impl BuiltinProviderPreset {
                 base_url: Some("https://dashscope.aliyuncs.com/compatible-mode/v1"),
                 default_model: Some("qwen-plus"),
                 api_key_env: Some("TONGYI_API_KEY"),
+                supports_structured_output: true,
             },
             Self::Moonshot => BuiltinProviderDefinition {
                 preset: self,
@@ -375,6 +416,7 @@ impl BuiltinProviderPreset {
                 base_url: Some("https://api.moonshot.cn/v1"),
                 default_model: Some("moonshot-v1-8k"),
                 api_key_env: Some("MOONSHOT_API_KEY"),
+                supports_structured_output: true,
             },
             Self::Ollama => BuiltinProviderDefinition {
                 preset: self,
@@ -382,6 +424,7 @@ impl BuiltinProviderPreset {
                 base_url: Some("http://localhost:11434/v1"),
                 default_model: Some("qwen2.5-coder:7b"),
                 api_key_env: None,
+                supports_structured_output: true,
             },
             Self::Anthropic => BuiltinProviderDefinition {
                 preset: self,
@@ -389,6 +432,7 @@ impl BuiltinProviderPreset {
                 base_url: Some("https://api.anthropic.com/v1"),
                 default_model: Some("claude-sonnet-4-20250514"),
                 api_key_env: Some("ANTHROPIC_API_KEY"),
+                supports_structured_output: true,
             },
             Self::Google => BuiltinProviderDefinition {
                 preset: self,
@@ -396,6 +440,7 @@ impl BuiltinProviderPreset {
                 base_url: Some("https://generativelanguage.googleapis.com/v1beta"),
                 default_model: Some("gemini-2.5-flash"),
                 api_key_env: Some("GOOGLE_API_KEY"),
+                supports_structured_output: true,
             },
             Self::Mock => BuiltinProviderDefinition {
                 preset: self,
@@ -403,6 +448,7 @@ impl BuiltinProviderPreset {
                 base_url: None,
                 default_model: Some("mock-model"),
                 api_key_env: None,
+                supports_structured_output: true,
             },
         }
     }

@@ -20,7 +20,10 @@
       "Bash(taskkill /F /IM \"morecode.exe\")",
       "Bash(powershell -Command 'Get-Process | Where-Object { $_.ProcessName -eq '\\\\''morecode'\\\\'' } | Stop-Process -Force')",
       "Bash(curl -s \"http://127.0.0.1:3002/api/runs\")",
-      "Bash(curl -s http://127.0.0.1:3003/api/runs)"
+      "Bash(curl -s http://127.0.0.1:3003/api/runs)",
+      "Bash(grep:*)",
+      "Bash(rustup show:*)",
+      "Bash(rustc --version)"
     ]
   }
 }

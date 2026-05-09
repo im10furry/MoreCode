@@ -16,6 +16,8 @@ pub struct OpenAiProviderConfig {
     pub request_timeout: Duration,
     #[serde(default = "default_stream_buffer_size")]
     pub stream_buffer_size: usize,
+    #[serde(default = "default_true")]
+    pub supports_structured_output: bool,
 }
 
 fn default_request_timeout() -> Duration {
@@ -24,6 +26,10 @@ fn default_request_timeout() -> Duration {
 
 fn default_stream_buffer_size() -> usize {
     64
+}
+
+fn default_true() -> bool {
+    true
 }
 
 impl OpenAiProviderConfig {

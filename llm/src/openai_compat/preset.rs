@@ -77,6 +77,7 @@ impl OpenAiCompatiblePreset {
             default_headers: definition.default_headers,
             request_timeout: std::time::Duration::from_secs(120),
             stream_buffer_size: 64,
+            supports_structured_output: !matches!(self, Self::DeepSeek),
         }
     }
 }

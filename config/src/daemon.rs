@@ -48,6 +48,116 @@ pub struct DaemonConfig {
     pub daily_budget_usd: Option<f64>,
     #[serde(default)]
     pub taskpile: TaskPileConfig,
+    #[serde(default)]
+    pub self_iteration: SelfIterationConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct SelfIterationConfig {
+    #[serde(default = "default_self_iteration_enabled")]
+    pub enabled: bool,
+    #[serde(default = "default_health_check_interval_mins")]
+    pub health_check_interval_mins: u64,
+    #[serde(default = "default_auto_fix_enabled")]
+    pub auto_fix_enabled: bool,
+    #[serde(default = "default_auto_commit_enabled")]
+    pub auto_commit_enabled: bool,
+    #[serde(default = "default_max_daily_tasks")]
+    pub max_daily_tasks: u32,
+    #[serde(default)]
+    pub budget_allocation: BudgetAllocationConfig,
+    #[serde(default)]
+    pub rules: IterationRulesConfig,
+}
+
+impl Default for SelfIterationConfig {
+    fn default() -> Self {
+        Self {
+            enabled: default_self_iteration_enabled(),
+            health_check_interval_mins: default_health_check_interval_mins(),
+            auto_fix_enabled: default_auto_fix_enabled(),
+            auto_commit_enabled: default_auto_commit_enabled(),
+            max_daily_tasks: default_max_daily_tasks(),
+            budget_allocation: BudgetAllocationConfig::default(),
+            rules: IterationRulesConfig::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct BudgetAllocationConfig {
+    #[serde(default = "default_health_monitoring_budget")]
+    pub health_monitoring: f64,
+    #[serde(default = "default_bug_fixes_budget")]
+    pub bug_fixes: f64,
+    #[serde(default = "default_improvements_budget")]
+    pub improvements: f64,
+    #[serde(default = "default_contingency_budget")]
+    pub contingency: f64,
+}
+
+impl Default for BudgetAllocationConfig {
+    fn default() -> Self {
+        Self {
+            health_monitoring: default_health_monitoring_budget(),
+            bug_fixes: default_bug_fixes_budget(),
+            improvements: default_improvements_budget(),
+            contingency: default_contingency_budget(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct IterationRulesConfig {
+    #[serde(default = "default_check_clippy")]
+    pub check_clippy: bool,
+    #[serde(default = "default_check_tests")]
+    pub check_tests: bool,
+    #[serde(default = "default_check_docs")]
+    pub check_docs: bool,
+    #[serde(default = "default_suggest_refactoring")]
+    pub suggest_refactoring: bool,
+}
+
+impl Default for IterationRulesConfig {
+    fn default() -> Self {
+        Self {
+            check_clippy: default_check_clippy(),
+            check_tests: default_check_tests(),
+            check_docs: default_check_docs(),
+            suggest_refactoring: default_suggest_refactoring(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
+pub struct PartialSelfIterationConfig {
+    pub enabled: Option<bool>,
+    pub health_check_interval_mins: Option<u64>,
+    pub auto_fix_enabled: Option<bool>,
+    pub auto_commit_enabled: Option<bool>,
+    pub max_daily_tasks: Option<u32>,
+    pub budget_allocation: Option<PartialBudgetAllocationConfig>,
+    pub rules: Option<PartialIterationRulesConfig>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
+pub struct PartialBudgetAllocationConfig {
+    pub health_monitoring: Option<f64>,
+    pub bug_fixes: Option<f64>,
+    pub improvements: Option<f64>,
+    pub contingency: Option<f64>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
+pub struct PartialIterationRulesConfig {
+    pub check_clippy: Option<bool>,
+    pub check_tests: Option<bool>,
+    pub check_docs: Option<bool>,
+    pub suggest_refactoring: Option<bool>,
 }
 
 impl Default for DaemonConfig {
@@ -61,6 +171,7 @@ impl Default for DaemonConfig {
             quiet_hours: None,
             daily_budget_usd: None,
             taskpile: TaskPileConfig::default(),
+            self_iteration: SelfIterationConfig::default(),
         }
     }
 }
@@ -124,6 +235,7 @@ pub struct PartialDaemonConfig {
     pub quiet_hours: Option<PartialQuietHours>,
     pub daily_budget_usd: Option<f64>,
     pub taskpile: Option<PartialTaskPileConfig>,
+    pub self_iteration: Option<PartialSelfIterationConfig>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
@@ -188,6 +300,9 @@ impl DaemonConfig {
         if let Some(value) = partial.taskpile {
             self.taskpile.apply_partial(value);
         }
+        if let Some(value) = partial.self_iteration {
+            self.self_iteration.apply_partial(value);
+        }
         Ok(())
     }
 
@@ -201,6 +316,8 @@ impl DaemonConfig {
                 self.taskpile.enabled = false;
                 self.taskpile.max_running_tasks = 1;
                 self.taskpile.default_token_budget = 6_000;
+
+                self.self_iteration.enabled = false;
             }
             DaemonProfile::Fast => {
                 self.health_check_interval_secs = 30;
@@ -210,6 +327,8 @@ impl DaemonConfig {
                 self.taskpile.enabled = true;
                 self.taskpile.max_running_tasks = 1;
                 self.taskpile.default_token_budget = 8_000;
+
+                self.self_iteration.enabled = false;
             }
             DaemonProfile::Medium => {
                 self.health_check_interval_secs = 30;
@@ -219,6 +338,11 @@ impl DaemonConfig {
                 self.taskpile.enabled = true;
                 self.taskpile.max_running_tasks = 2;
                 self.taskpile.default_token_budget = 12_000;
+
+                self.self_iteration.enabled = true;
+                self.self_iteration.health_check_interval_mins = 60;
+                self.self_iteration.auto_fix_enabled = false;
+                self.self_iteration.max_daily_tasks = 5;
             }
             DaemonProfile::Full => {
                 self.health_check_interval_secs = 15;
@@ -228,6 +352,13 @@ impl DaemonConfig {
                 self.taskpile.enabled = true;
                 self.taskpile.max_running_tasks = 3;
                 self.taskpile.default_token_budget = 20_000;
+
+                self.self_iteration.enabled = true;
+                self.self_iteration.health_check_interval_mins = 30;
+                self.self_iteration.auto_fix_enabled = true;
+                self.self_iteration.max_daily_tasks = 15;
+                self.self_iteration.rules.check_clippy = true;
+                self.self_iteration.rules.check_tests = true;
             }
             DaemonProfile::FullExtensible => {
                 self.health_check_interval_secs = 15;
@@ -237,7 +368,77 @@ impl DaemonConfig {
                 self.taskpile.enabled = true;
                 self.taskpile.max_running_tasks = 4;
                 self.taskpile.default_token_budget = 25_000;
+
+                self.self_iteration.enabled = true;
+                self.self_iteration.health_check_interval_mins = 15;
+                self.self_iteration.auto_fix_enabled = true;
+                self.self_iteration.auto_commit_enabled = true;
+                self.self_iteration.max_daily_tasks = 20;
+                self.self_iteration.rules.check_clippy = true;
+                self.self_iteration.rules.check_tests = true;
+                self.self_iteration.rules.check_docs = true;
+                self.self_iteration.rules.suggest_refactoring = true;
             }
+        }
+    }
+}
+
+impl SelfIterationConfig {
+    pub(crate) fn apply_partial(&mut self, partial: PartialSelfIterationConfig) {
+        if let Some(value) = partial.enabled {
+            self.enabled = value;
+        }
+        if let Some(value) = partial.health_check_interval_mins {
+            self.health_check_interval_mins = value;
+        }
+        if let Some(value) = partial.auto_fix_enabled {
+            self.auto_fix_enabled = value;
+        }
+        if let Some(value) = partial.auto_commit_enabled {
+            self.auto_commit_enabled = value;
+        }
+        if let Some(value) = partial.max_daily_tasks {
+            self.max_daily_tasks = value;
+        }
+        if let Some(value) = partial.budget_allocation {
+            self.budget_allocation.apply_partial(value);
+        }
+        if let Some(value) = partial.rules {
+            self.rules.apply_partial(value);
+        }
+    }
+}
+
+impl BudgetAllocationConfig {
+    pub(crate) fn apply_partial(&mut self, partial: PartialBudgetAllocationConfig) {
+        if let Some(value) = partial.health_monitoring {
+            self.health_monitoring = value;
+        }
+        if let Some(value) = partial.bug_fixes {
+            self.bug_fixes = value;
+        }
+        if let Some(value) = partial.improvements {
+            self.improvements = value;
+        }
+        if let Some(value) = partial.contingency {
+            self.contingency = value;
+        }
+    }
+}
+
+impl IterationRulesConfig {
+    pub(crate) fn apply_partial(&mut self, partial: PartialIterationRulesConfig) {
+        if let Some(value) = partial.check_clippy {
+            self.check_clippy = value;
+        }
+        if let Some(value) = partial.check_tests {
+            self.check_tests = value;
+        }
+        if let Some(value) = partial.check_docs {
+            self.check_docs = value;
+        }
+        if let Some(value) = partial.suggest_refactoring {
+            self.suggest_refactoring = value;
         }
     }
 }
@@ -396,4 +597,56 @@ fn default_taskpile_default_token_budget() -> u32 {
 
 fn default_taskpile_default_isolation_profile() -> String {
     "workspace-write".to_string()
+}
+
+fn default_self_iteration_enabled() -> bool {
+    false
+}
+
+fn default_health_check_interval_mins() -> u64 {
+    30
+}
+
+fn default_auto_fix_enabled() -> bool {
+    false
+}
+
+fn default_auto_commit_enabled() -> bool {
+    false
+}
+
+fn default_max_daily_tasks() -> u32 {
+    10
+}
+
+fn default_health_monitoring_budget() -> f64 {
+    0.10
+}
+
+fn default_bug_fixes_budget() -> f64 {
+    0.50
+}
+
+fn default_improvements_budget() -> f64 {
+    0.30
+}
+
+fn default_contingency_budget() -> f64 {
+    0.10
+}
+
+fn default_check_clippy() -> bool {
+    true
+}
+
+fn default_check_tests() -> bool {
+    true
+}
+
+fn default_check_docs() -> bool {
+    false
+}
+
+fn default_suggest_refactoring() -> bool {
+    false
 }
